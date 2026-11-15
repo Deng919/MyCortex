@@ -56,12 +56,13 @@ class ToolsMcpServer extends Server {
 export function createToolsMcpServer(params: {
   name: string;
   tools: AnyAgentTool[];
+  instructions?: string;
   sdkResourceHost?: LegacyPluginSdkResourceHost;
 }): Server {
   const handlers = createPluginToolsMcpHandlers(params.tools);
   const server = new ToolsMcpServer(
     { name: params.name, version: VERSION },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {} }, instructions: params.instructions },
   );
   const servingContext = params.sdkResourceHost?.run(() => AsyncLocalStorage.snapshot());
   const runInServingContext = <T>(run: () => T): T =>

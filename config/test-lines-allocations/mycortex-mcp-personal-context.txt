@@ -1,0 +1,3 @@
+36
+# Real MCP initialize/tools-list boundary: recall/submission guidance follows read/submit grants,
+# including read-only, submit-only, combined, and manage-only connections.

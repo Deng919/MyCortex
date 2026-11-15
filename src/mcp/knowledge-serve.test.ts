@@ -4,7 +4,43 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { expect, it } from "vitest";
+import type { KnowledgeCapability } from "../knowledge/config.js";
 import { createKnowledgeMcpServer } from "./knowledge-serve.js";
+
+it.each<KnowledgeCapability[]>([["read"], ["submit"], ["read", "submit"], ["manage"]])(
+  "delivers automatic personal-context guidance only for granted capabilities: %j",
+  async (...capabilities) => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-mcp-guidance-"));
+    const service = createKnowledgeMcpServer({
+      directory,
+      connectionId: "synthetic-guidance",
+      capabilities,
+    });
+    const client = new Client({ name: "synthetic-guidance", version: "1" });
+    const [outbound, inbound] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([service.server.connect(inbound), client.connect(outbound)]);
+      const instructions = client.getInstructions() ?? "";
+      const tools = (await client.listTools()).tools;
+      for (const [capability, name, guidance] of [
+        ["read", "knowledge_read", /Before personalizing/],
+        ["submit", "knowledge_write", /Automatically save/],
+      ] as const) {
+        if (capabilities.includes(capability)) {
+          expect(instructions).toMatch(guidance);
+          expect(tools.find((tool) => tool.name === name)?.description).toMatch(guidance);
+        } else {
+          expect(instructions).not.toMatch(guidance);
+          expect(tools.find((tool) => tool.name === name)?.description ?? "").not.toMatch(guidance);
+        }
+      }
+    } finally {
+      await client.close();
+      await service.close();
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 it("exposes the same durable knowledge tools over MCP with a host-owned read-only grant", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-mcp-"));
