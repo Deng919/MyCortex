@@ -1,0 +1,3 @@
+83
+# HTTP/real-worker desktop boundary: full originals, idempotency, revisions,
+# history/deletion and unauthenticated, cross-origin, invalid and oversized inputs.

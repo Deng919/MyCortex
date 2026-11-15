@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyCortex · 记忆</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="workspace">
+      <aside class="sidebar" aria-label="记忆列表">
+        <header class="brand">
+          <span class="brand-mark">M</span>
+          <div>
+            <span class="brand-name">MyCortex</span
+            ><span class="brand-caption">你的个人记忆库</span>
+          </div>
+          <span class="local-badge">本机</span>
+        </header>
+        <div class="collection-head">
+          <h1>记忆</h1>
+          <button id="new" class="primary compact">＋ 新增记忆</button>
+        </div>
+        <label class="search-box"
+          ><span aria-hidden="true">⌕</span
+          ><input
+            id="search"
+            type="search"
+            placeholder="搜索内容、标题或来源"
+            aria-label="搜索记忆"
+            maxlength="605"
+          /><kbd>/</kbd></label
+        >
+        <div class="list-heading">
+          <span id="list-caption">最近保存</span
+          ><button id="refresh" class="text-button" title="刷新记忆列表">刷新</button>
+        </div>
+        <p id="search-hint" class="search-hint" hidden>
+          多个关键词用空格隔开，显示最近 10 条匹配。
+        </p>
+        <div id="list" class="memory-list" aria-live="polite"></div>
+        <div class="pagination">
+          <button id="previous" class="text-button">← 上一页</button><span id="page-number"></span
+          ><button id="next" class="text-button">下一页 →</button>
+        </div>
+        <footer class="sidebar-footer">
+          <span class="status-dot"></span><span id="connection">正在连接记忆库…</span
+          ><button id="store-info" class="text-button" title="查看存储位置">存储位置</button>
+        </footer>
+      </aside>
+      <main id="main">
+        <header class="main-top">
+          <button id="back" class="text-button">← 记忆列表</button
+          ><span class="eyebrow">个人空间 <span>/</span> 已保存的记忆</span
+          ><span class="top-note">记下的，随时找回。</span>
+        </header>
+        <div id="message" role="status" hidden></div>
+        <section id="empty" class="empty-state">
+          <div class="empty-symbol" aria-hidden="true">≡</div>
+          <h2>给记忆一个安放的地方</h2>
+          <p>选择一条记忆，查看内容、来源和历史。<br />也可以添加一段现在想留下的话。</p>
+          <button id="empty-new" class="primary">＋ 新增记忆</button
+          ><span class="empty-footnote">与连接到同一知识库的 AI 共享保存内容</span>
+        </section>
+        <section id="detail" hidden>
+          <div class="detail-header">
+            <div class="detail-label">
+              <span id="kind" class="pill"></span><span id="saved-date"></span>
+            </div>
+            <div class="title-row">
+              <h2 id="title"></h2>
+              <div class="actions">
+                <button id="edit" class="secondary">编辑</button
+                ><button id="delete" class="danger-text">删除</button>
+              </div>
+            </div>
+            <p id="version-label" class="version-label"></p>
+          </div>
+          <nav class="tabs" aria-label="记忆内容">
+            <button id="tab-original" aria-current="page">原文</button
+            ><button id="tab-organization">整理结果</button
+            ><button id="tab-history">历史版本</button>
+          </nav>
+          <div id="original-panel" class="detail-content">
+            <div id="historical-banner" hidden>
+              正在查看历史版本
+              <button id="return-current" class="text-button">返回当前版本 →</button>
+            </div>
+            <div id="body" class="body-text"></div>
+            <dl id="metadata" class="metadata"></dl>
+          </div>
+          <div id="organization-panel" class="detail-content" hidden></div>
+          <div id="history-panel" class="detail-content" hidden></div>
+        </section>
+      </main>
+    </div>
+    <dialog id="editor">
+      <form id="edit-form">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">MYCORTEX</span>
+            <h2 id="editor-title">新增记忆</h2>
+          </div>
+          <button type="button" id="close-editor" class="icon-button" aria-label="关闭编辑">
+            ×
+          </button>
+        </div>
+        <p id="edit-description" class="muted"></p>
+        <div id="new-fields">
+          <label
+            >标题<input id="input-title" maxlength="300" placeholder="给这段记忆起个名字" required
+          /></label>
+          <div class="field-row">
+            <label
+              >类型<select id="input-kind">
+                <option value="text">文字记忆</option>
+                <option value="reference">来源链接</option>
+              </select></label
+            ><label
+              >原作者<input id="input-author" maxlength="512" placeholder="未知可留空"
+            /></label>
+          </div>
+          <label
+            >来源<input
+              id="input-source"
+              maxlength="2048"
+              placeholder="可填网址或来源描述，留空表示手动记录"
+          /></label>
+        </div>
+        <label id="body-field"
+          >正文<textarea
+            id="input-body"
+            rows="9"
+            placeholder="记录想法、经历，或粘贴想保留的原话…"
+            required
+          ></textarea></label
+        ><label id="note-field" hidden
+          >修改说明<input id="input-note" maxlength="2000" placeholder="可选，例如：更新计划"
+        /></label>
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-footer">
+          <span id="body-count" class="muted"></span>
+          <div>
+            <button type="button" id="cancel-editor" class="secondary">取消</button
+            ><button id="save" type="submit" class="primary">保存记忆</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="delete-dialog">
+      <form id="delete-form">
+        <div class="delete-icon" aria-hidden="true">−</div>
+        <h2>删除这条记忆？</h2>
+        <p id="delete-title"></p>
+        <p class="muted">
+          正文、整理结果和全部历史版本都会从本库清除，无法撤销。原始文件不受影响。
+        </p>
+        <p id="delete-error" class="form-error" role="alert" hidden></p>
+        <div class="dialog-footer">
+          <button type="button" id="cancel-delete" class="secondary">取消</button
+          ><button id="confirm-delete" type="submit" class="danger">删除记忆</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="store-dialog">
+      <h2>记忆存储位置</h2>
+      <p class="muted">客户端与指向同一目录的 MCP 连接共享数据。</p>
+      <p id="store-path" class="path"></p>
+      <form method="dialog"><button class="primary">知道了</button></form>
+    </dialog>
+  </body>
+</html>

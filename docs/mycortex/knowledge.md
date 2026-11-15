@@ -1,6 +1,6 @@
 # MyCortex 知识库：聊天与独立连接
 
-知识库通过现有 OpenClaw 聊天模型的 `knowledge_read` / `knowledge_write` 工具使用，支持保存原文/引用、按任务检索、材料列表、带依据读取、纠正和删除。独立 AI 可通过 MCP stdio 连接同一个存储。离线 CLI 继续用于直接管理和备份。
+知识库通过现有 OpenClaw 聊天模型的 `knowledge_read` / `knowledge_write` 工具使用，支持保存原文/引用、按任务检索、材料列表、带依据读取、纠正和删除。独立 AI 可通过 MCP stdio 连接同一个存储。Windows 用户可使用[记忆客户端](desktop.md)查看、编辑和删除记忆；离线 CLI 继续用于直接管理和备份。
 
 代码位于 OpenClaw 核心 `src/knowledge`，知识数据独立于聊天和 Agent。当前用合成资料验证，生产加密方式尚待确定。
 
@@ -228,7 +228,7 @@ Set-Content -Encoding utf8 D:\Cache\MyCortex\demo-note.txt '合成纠正：测�
 
 - 运行期 SQL 在已有 WorkerTaskPool 中执行，复用与离线 CLI 相同的进程锁和权威存储；空库列表/查询返回空，无需聊天用户手动初始化。
 - 同一目录的命令通过进程锁串行执行，写入在事务提交前再检查当前授权。已获准提交后丢失回执时会报告结果未知，要求核对当前修订。
-- QQ/微信自动采集、目录批量扫描、PDF/Word 解析、专用知识管理界面、E2EE 与生产部署仍待实现。
+- QQ/微信自动采集、目录批量扫描、PDF/Word 解析、E2EE 与生产部署仍待实现。独立 Windows 记忆窗口已有源码启动器，独立分发安装包尚未提供。
 - 数据模型保持来源开放，不设置学历、健康等固定领域。
 
 ## 验证
