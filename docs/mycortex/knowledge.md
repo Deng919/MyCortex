@@ -154,7 +154,7 @@ QQ Digest 保留完整 QQ 归档，只有已经确认并实际写入 QQ Digest �
 
 ```powershell
 D:\CodexTools\python\Scripts\qq-digest.exe export-mycortex `
-  --config-path D:\Dev\QQDigest\config\config.yaml `
+  --config-path D:\Desktop\AI\chatbot\config\config.yaml `
   --out D:\Cache\MyCortex\qqdigest-2026-11-15.json
 ```
 
