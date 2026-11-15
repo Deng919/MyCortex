@@ -90,6 +90,11 @@ export const CORE_TOOL_DEFINITIONS = [
     [
       ["memory_search"],
       ["memory_get", { replay: "both" }],
+      [
+        "knowledge_read",
+        { profiles: ["coding", "messaging"], factoryFamily: "openclaw", replay: "both" },
+      ],
+      ["knowledge_write", { profiles: ["coding", "messaging"], factoryFamily: "openclaw" }],
       ["personal_instructions", { profiles: ["coding", "messaging"], factoryFamily: "openclaw" }],
     ],
   ),

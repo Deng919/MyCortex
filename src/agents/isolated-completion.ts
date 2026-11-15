@@ -160,7 +160,6 @@ async function runIsolatedCompletionOwned(
   const completionId = randomUUID();
   const requestConfig = input.config ?? {};
   const agentId = input.agentId ?? resolveDefaultAgentId(requestConfig);
-  const requestAgentDir = input.agentDir ?? resolveAgentDir(requestConfig, agentId);
   const requestedWorkspaceDir =
     input.workspaceDir ?? resolveAgentWorkspaceDir(requestConfig, agentId);
   const { provider, runtimeOverride } = resolveIsolatedCompletionProvider({
@@ -199,7 +198,7 @@ async function runIsolatedCompletionOwned(
     {
       config: requestConfig,
       agentId,
-      agentDir: requestAgentDir,
+      agentDir: input.agentDir ?? resolveAgentDir(requestConfig, agentId),
       workspaceDir: requestedWorkspaceDir,
       preserveWorkspaceDirOnRefresh: input.workspaceDir !== undefined,
       runtimePluginPurpose: "isolated-completion",
@@ -305,7 +304,6 @@ async function runIsolatedCompletionOwned(
               request.operatorAuthority,
             );
             try {
-              request.assertCurrent?.();
               const execute = () =>
                 runCliAgent({
                   preparedRunAdmission,
@@ -329,6 +327,7 @@ async function runIsolatedCompletionOwned(
                   streamParams: resolveIsolatedStreamParams(request),
                   abortSignal: request.abortSignal,
                   assertCurrent: request.assertCurrent,
+                  prepareDispatch: request.prepareDispatch,
                   mapOperatorAuthorizationError: request.mapOperatorAuthorizationError,
                   executionMode: "side-question",
                   cliToolAvailability: { native: [], openClaw: [] },
@@ -623,6 +622,8 @@ async function runIsolatedCompletionOwned(
               throw new Error("Prepared runtime auth candidates are temporarily unavailable.");
             }
             assertCurrent();
+            await request.prepareDispatch?.();
+            assertCurrent();
             const execution = modelAuthority.bind(modelForAuthorization, authorization);
             execution.assertCurrent();
             const dispatch = () =>
@@ -676,6 +677,8 @@ async function runIsolatedCompletionOwned(
           auth: authorization.auth,
           sourceAuthFingerprint: authorization.sourceAuthFingerprint,
         };
+        assertCurrent();
+        await request.prepareDispatch?.();
         assertCurrent();
         const execution = modelAuthority.bind(modelForAuthorization);
         const dispatch = () =>

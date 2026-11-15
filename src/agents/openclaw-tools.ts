@@ -72,6 +72,7 @@ import { createImageGenerateTool } from "./tools/image-generate-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { callAgentToolGatewayRequest } from "./tools/in-process-gateway.js";
 import { createInstalledSkillTools } from "./tools/installed-skill-tools.js";
+import { createKnowledgeTools } from "./tools/knowledge-tools.js";
 import { createMessageTool, createMessageToolAsync } from "./tools/message-tool-execution.js";
 import { createMobileUiTool } from "./tools/mobile-ui-tool.js";
 import { createMusicGenerateTool } from "./tools/music-generate-tool.js";
@@ -490,6 +491,14 @@ function* createOpenClawToolsSteps(
     workspaceDir: spawnWorkspaceDir,
   };
   const tools: AnyAgentTool[] = [
+    ...createKnowledgeTools({
+      getConfig: () => sessionConfig ?? getRuntimeConfig(),
+      connectionId: options?.runSessionKey ?? options?.agentSessionKey ?? "",
+      assertCurrent: () => options?.assertInvocationCurrent?.(),
+      registerCleanup: options?.registerRunCleanup
+        ? (close) => options.registerRunCleanup?.(close)
+        : undefined,
+    }),
     ...createInstalledSkillTools(options?.installedSkills ?? []),
     createDashboardTool({
       agentSessionKey:

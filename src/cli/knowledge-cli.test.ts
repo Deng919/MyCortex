@@ -55,6 +55,11 @@ it("runs the material lifecycle through the actual command parser and local stor
   await expect(run("read", id)).rejects.toThrow(/deleted/i);
   expect(JSON.parse(await fs.readFile(exported, "utf8"))).toMatchObject({
     format: "mycortex.materials",
-    version: 1,
+    version: 2,
   });
+  const ledger = path.join(directory, "latest-deletions.json");
+  await run("export-deletions", "--out", ledger);
+  expect(await fs.readFile(ledger, "utf8")).not.toContain("电压");
+  expect(JSON.parse(await fs.readFile(ledger, "utf8"))).toMatchObject({ materials: [{ id }] });
+  await expect(run("import", "--file", exported)).rejects.toThrow(/deletions-from/);
 });

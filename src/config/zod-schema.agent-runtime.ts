@@ -9,6 +9,7 @@ import {
   type ExecSecurity,
 } from "../infra/exec-approvals-core.js";
 import { isBlockedObjectKey } from "../infra/prototype-keys.js";
+import { KnowledgeConfigSchema } from "../knowledge/config.js";
 import { LEGACY_WEB_SEARCH_PROVIDER_CONFIG_KEYS } from "./web-search-legacy-provider-keys.js";
 import { AgentEntryBaseSchema } from "./zod-schema.agent-entry-base.js";
 import { AgentModelSchema } from "./zod-schema.agent-model.js";
@@ -628,6 +629,7 @@ export const ToolsSchema = z
   .strictObject({
     ...CommonToolPolicyFields,
     gatewayPolicy: GatewayToolPolicySchema.optional(),
+    knowledge: KnowledgeConfigSchema.optional(),
     web: ToolsWebSchema,
     /** Managed local GitHub CLI identity and Git author; never overrides Git transport. */
     github: GitHubToolIdentitySchema,

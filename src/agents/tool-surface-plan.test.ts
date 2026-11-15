@@ -373,6 +373,31 @@ describe("applyAgentToolSurfaceCatalog", () => {
     expect(config.tools).toBeUndefined();
   });
 
+  it("keeps knowledge tools directly visible for unconfigured local Ollama runs", () => {
+    const runtime = createAgentHarnessToolSurfaceRuntimeCore({
+      config: {},
+      model: { api: "ollama", toolSearchMode: "tools", contextWindow: 8192 },
+      modelToolsEnabled: true,
+      preparedToolOverrideAllowlist: [],
+      executeTool,
+    });
+    try {
+      const result = runtime.compactTools([
+        createStubTool("knowledge_read"),
+        createStubTool("knowledge_write"),
+      ]);
+      expect(result.tools.map((tool) => tool.name)).toEqual([
+        "tool_search",
+        "tool_describe",
+        "dispatch_action",
+        "knowledge_read",
+        "knowledge_write",
+      ]);
+    } finally {
+      runtime.cleanup();
+    }
+  });
+
   it("uses the code-mode catalog when code-mode controls are enabled", () => {
     const config: OpenClawConfig = {
       tools: { codeMode: true, toolSearch: { enabled: true, mode: "directory" } },

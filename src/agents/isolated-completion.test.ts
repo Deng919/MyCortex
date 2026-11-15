@@ -40,6 +40,15 @@ const { prepareUtilityCompletionForAgent } = await import("./utility-completion.
 
 beforeEach(resetIsolatedCompletionTestState);
 
+it("delegates source admission to the prepared CLI execution owner", async () => {
+  cliReply();
+  const prepareDispatch = async () => {
+    throw new Error("source deleted");
+  };
+  await expect(cliComplete({ prepareDispatch })).resolves.toMatchObject({ text: "done" });
+  expect(mocks.runCliAgent).toHaveBeenCalledWith(expect.objectContaining({ prepareDispatch }));
+});
+
 function expectCall(mock: unknown, shape: object) {
   expect(mock).toHaveBeenCalledWith(expect.objectContaining(shape));
 }

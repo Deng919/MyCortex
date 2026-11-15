@@ -8,11 +8,17 @@ export async function withKnowledgeStore<T>(
   directory: string,
   create: boolean,
   operation: (store: KnowledgeStore) => T | Promise<T>,
+  options: { beforeCommit?: () => void } = {},
 ): Promise<T> {
   if (create) {
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   }
-  const canonical = await fs.realpath(directory);
+  const canonical = await fs.realpath(directory).catch((error: unknown) => {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      throw new Error("Knowledge store is missing; run init first", { cause: error });
+    }
+    throw error;
+  });
   const filename = path.join(canonical, "knowledge.sqlite");
   const lock = await acquireFileLock(filename, {
     retries: { retries: 8, factor: 1.5, minTimeout: 50, maxTimeout: 500 },
@@ -20,7 +26,7 @@ export async function withKnowledgeStore<T>(
     staleRecovery: "remove-if-definitely-stale",
   });
   try {
-    const store = new KnowledgeStore(filename, { create });
+    const store = new KnowledgeStore(filename, { create, beforeCommit: options.beforeCommit });
     try {
       return await operation(store);
     } finally {

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { withKnowledgeStore } from "../knowledge/access.js";
 import { MAX_BODY_BYTES, MAX_EXPORT_BYTES } from "../knowledge/contract.js";
+import { mergeDeletionLedger } from "../knowledge/recovery.js";
 import type { KnowledgeStore } from "../knowledge/store.js";
 
 async function readUtf8(filename: string, maximum: number): Promise<string> {
@@ -54,7 +55,7 @@ export function registerKnowledgeCli(program: Command): void {
   knowledge
     .command("init")
     .description("Initialize an isolated knowledge directory")
-    .action(async () => use(true, () => ({ initialized: true, schemaVersion: 1 })));
+    .action(async () => use(true, () => ({ initialized: true, schemaVersion: 2 })));
 
   const metadata = (command: Command) =>
     command
@@ -127,6 +128,31 @@ export function registerKnowledgeCli(program: Command): void {
       ),
   );
 
+  knowledge
+    .command("serve")
+    .description("Expose the knowledge tools to one authorized local MCP stdio connection")
+    .requiredOption("--connection <id>", "Host-assigned connection identity")
+    .option("--capabilities <list>", "Comma-separated read,submit,manage,organize grants", "read")
+    .option("--file-root <directories...>", "Approved absolute directories for current file reads")
+    .action(async (options: { connection: string; capabilities: string; fileRoot?: string[] }) => {
+      const { serveKnowledgeMcp } = await import("../mcp/knowledge-serve.js");
+      await serveKnowledgeMcp({
+        directory: path.resolve(knowledge.opts<{ store: string }>().store),
+        connectionId: options.connection,
+        capabilities: options.capabilities,
+        fileRoots: options.fileRoot,
+      });
+    });
+  knowledge
+    .command("list")
+    .description("List current materials, newest first")
+    .option("--limit <number>", "Result limit, 1–20", "10")
+    .option("--offset <number>", "Pagination offset", "0")
+    .action(async (options: { limit: string; offset: string }) =>
+      use(false, (store) => ({
+        results: store.list(Number(options.limit), Number(options.offset)),
+      })),
+    );
   knowledge
     .command("search <text>")
     .description("Search current original materials literally")
@@ -204,11 +230,59 @@ export function registerKnowledgeCli(program: Command): void {
       }),
     );
   knowledge
+    .command("export-deletions")
+    .description("Export the latest deletion ledger without original text")
+    .requiredOption("--out <path>", "New ledger file; existing files are never overwritten")
+    .action(async (options: { out: string }) =>
+      use(false, async (store) => {
+        const output = path.resolve(options.out);
+        const data = JSON.stringify(
+          {
+            format: "mycortex.deletions",
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            materials: store.deletions(),
+          },
+          null,
+          2,
+        );
+        const file = await fs.open(output, "wx", 0o600);
+        try {
+          await file.writeFile(data, "utf8");
+          await file.sync();
+        } finally {
+          await file.close();
+        }
+        return { exported: true, path: output };
+      }),
+    );
+  knowledge
     .command("import")
     .description("Restore a portable backup into an empty initialized store")
     .requiredOption("--file <path>", "Portable MyCortex export, at most 32 MiB")
-    .action(async (options: { file: string }) => {
-      const bundle: unknown = JSON.parse(await readUtf8(options.file, MAX_EXPORT_BYTES));
+    .option("--deletions-from <path>", "Latest deletion ledger from the authoritative store")
+    .option(
+      "--historical",
+      "Explicitly restore the historical state without a current deletion ledger",
+    )
+    .action(async (options: { file: string; deletionsFrom?: string; historical?: boolean }) => {
+      if (!options.deletionsFrom && !options.historical) {
+        throw new Error(
+          "Restore needs --deletions-from <latest-ledger>; use --historical only to deliberately restore that historical state",
+        );
+      }
+      if (options.deletionsFrom && options.historical) {
+        throw new Error(
+          "Choose either the current deletion ledger or an explicit historical restore",
+        );
+      }
+      let bundle: unknown = JSON.parse(await readUtf8(options.file, MAX_EXPORT_BYTES));
+      if (options.deletionsFrom) {
+        bundle = mergeDeletionLedger(
+          bundle,
+          JSON.parse(await readUtf8(options.deletionsFrom, MAX_EXPORT_BYTES)),
+        );
+      }
       return use(false, (store) => {
         store.import(bundle);
         return { imported: true };

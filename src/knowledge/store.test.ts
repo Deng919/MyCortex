@@ -27,6 +27,53 @@ afterEach(() => {
 });
 
 describe("knowledge material lifecycle", () => {
+  it("lists current materials, searches several literal terms case-insensitively, and reads bounded slices", () => {
+    const store = new KnowledgeStore(file(), { create: true });
+    try {
+      const first = store.submit({ ...input, body: "Alpha " + "界".repeat(10000) });
+      const second = store.submit({
+        ...input,
+        requestKey: "second",
+        title: "Beta ÉCLAIR",
+        body: "different",
+      });
+      expect(store.searchMany(["absent", "ALPHA"])).toMatchObject([{ id: first.id }]);
+      expect(store.searchMany(["alpha", "BETA"])).toHaveLength(2);
+      expect(store.searchMany(["éclair"])).toMatchObject([{ id: second.id }]);
+      expect(store.searchMany(["%", "_", "' OR 1=1 --"])).toEqual([]);
+      expect(store.list(1)).toHaveLength(1);
+      expect(store.list(1, 1)).toHaveLength(1);
+      expect(store.readSlice(first.id, { offset: 6, length: 20 })).toMatchObject({
+        body: "界".repeat(20),
+        offset: 6,
+        totalLength: 10006,
+        truncated: true,
+      });
+      expect(() => store.readSlice(first.id, { length: 100000 })).toThrow();
+      expect(() => store.searchMany([])).toThrow();
+      expect(() => store.searchMany(Array(9).fill("a"))).toThrow();
+      store.remove(second.id, 1);
+      expect(store.list()).toMatchObject([{ id: first.id }]);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rolls back a mutation when its final commit authority is revoked", () => {
+    const filename = file();
+    new KnowledgeStore(filename, { create: true }).close();
+    const store = new KnowledgeStore(filename, {
+      beforeCommit: () => {
+        throw new Error("revoked");
+      },
+    });
+    try {
+      expect(() => store.submit(input)).toThrow("revoked");
+      expect(store.list()).toEqual([]);
+    } finally {
+      store.close();
+    }
+  });
   it("persists original Chinese text and source, searches literally with bounded results", () => {
     const filename = file();
     let store = new KnowledgeStore(filename, { create: true });

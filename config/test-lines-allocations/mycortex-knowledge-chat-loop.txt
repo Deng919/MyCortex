@@ -1,0 +1,4 @@
+1802
+# Durable worker admission and current-version reads; source-bound organization and
+# migration/restore; connection grants, file roots, MCP, PowerShell argv; actual
+# Gateway chat lifecycle and final CLI disclosure admission. Exact net test growth.

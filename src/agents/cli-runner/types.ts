@@ -147,6 +147,8 @@ export type RunCliAgentParams = Pick<
   };
   /** Caller-owned authority for credential use; cancellation alone is not authorization. */
   assertCurrent?: SessionSourceAssertion;
+  /** Owner-held data admission after backend preparation, immediately before dispatch. */
+  prepareDispatch?: () => Promise<void>;
   /** Internal completion caller's representation of operator authorization failures. */
   mapOperatorAuthorizationError?: (error: unknown) => Error;
   onExecutionStarted?: () => unknown;

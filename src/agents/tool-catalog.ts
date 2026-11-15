@@ -67,6 +67,8 @@ const CORE_TOOL_DESCRIPTIONS = {
   x_search: "Search X posts",
   memory_search: "Semantic search",
   memory_get: "Read memory files",
+  knowledge_read: "Find and read personal knowledge with source evidence",
+  knowledge_write: "Save, correct or delete personal knowledge",
   personal_instructions: "Edit the requesting user’s personal instructions",
   presence: "Online people, connected devices, recent activity, and connection location",
   sessions: "Session settings: label, pin, archive, groups",

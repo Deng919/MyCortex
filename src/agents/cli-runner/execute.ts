@@ -496,6 +496,8 @@ export async function executePreparedCliRun(
         useResume,
         trigger: params.trigger,
       });
+      await params.prepareDispatch?.();
+      assertCurrent();
       if (context.trajectoryRecorder) {
         recordCliTrajectoryEvent(context.trajectoryRecorder, "prompt.submitted", {
           prompt: sentPrompt,

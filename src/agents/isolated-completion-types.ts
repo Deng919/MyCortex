@@ -30,6 +30,8 @@ export type RunIsolatedCompletionParams = {
   onRequestComplete?: (durationMs: number) => void;
   /** Revalidate the caller's authority before credential handoff and dispatch. */
   assertCurrent?: () => void;
+  /** Owner-held data admission after model/auth preparation, immediately before dispatch. */
+  prepareDispatch?: () => Promise<void>;
   /** Explicit requester restriction; automatic metadata callers remain system-owned. */
   operatorAuthority?: AdmittedRunOperatorAuthority;
   /** Adapt host authorization failures to the calling completion API's error contract. */
