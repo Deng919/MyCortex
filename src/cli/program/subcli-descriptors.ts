@@ -90,6 +90,11 @@ const registerCron: SubCliRegistration = async (program) =>
 
 // Implementations are exhaustive over the metadata catalog; parsing never imports this map.
 const registrations = {
+  knowledge: {
+    register: async (program) =>
+      (await import("../knowledge-cli.js")).registerKnowledgeCli(program),
+    machineOutput: () => true,
+  },
   acp: { register: async (program) => (await import("../acp-cli.js")).registerAcpCli(program) },
   gateway: {
     register: async (program) => (await import("../gateway-cli.js")).registerGatewayCli(program),

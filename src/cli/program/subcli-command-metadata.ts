@@ -11,6 +11,7 @@ function command<const N extends string>(
   return { name, description, hasSubcommands: true, ...options };
 }
 const commands = [
+  command("knowledge", "Manage the local MyCortex material store"),
   command("acp", "Run an ACP bridge backed by the Gateway"),
   command("gateway", "Run, inspect, and query the WebSocket Gateway"),
   command("daemon", "Manage the Gateway service (launchd/systemd/schtasks)"),

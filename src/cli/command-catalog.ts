@@ -39,6 +39,10 @@ const serviceInstallStartupPolicy: CliCommandCatalogEntry["policy"] = {
 /** Command path registry used before Commander registration has loaded all plugins. */
 export const cliCommandCatalog: readonly CliCommandCatalogEntry[] = [
   {
+    commandPath: ["knowledge"],
+    policy: { ...PASSIVE_STARTUP_POLICY, hideBanner: true, ownsProtocolStdout: true },
+  },
+  {
     commandPath: ["setup"],
     policy: {
       configGuard: ({ argv, options }) =>
