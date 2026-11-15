@@ -65,7 +65,7 @@ describe("QQ Digest bundle import", () => {
 
   it("rejects duplicate candidate identities in one bundle", () => {
     const raw = bundle();
-    raw.candidates.push({ ...raw.candidates[0] });
+    raw.candidates.push(...raw.candidates);
     expect(() => importQqDigestBundle(store(), raw)).toThrow(/duplicate/i);
   });
 });
