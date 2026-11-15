@@ -9,29 +9,46 @@
     <script src="/app.js" defer></script>
   </head>
   <body>
+    <header class="app-header">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <rect x="6" y="4" width="24" height="29" rx="5" fill="currentColor" opacity=".16" />
+          <rect x="12" y="10" width="23" height="27" rx="5" fill="currentColor" />
+          <path
+            d="M18 19h11M18 24h11M18 29h6"
+            stroke="white"
+            stroke-width="2"
+            stroke-linecap="round"
+          />
+        </svg>
+        <span class="brand-name">MyCortex</span>
+        <span class="brand-caption">记忆库</span>
+      </div>
+      <label class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m16 16 4 4" />
+        </svg>
+        <input
+          id="search"
+          type="search"
+          placeholder="搜索记忆"
+          aria-label="搜索记忆"
+          maxlength="605"
+        />
+        <kbd>/</kbd>
+      </label>
+      <div class="header-tools">
+        <span id="connection" class="connection" role="status">正在连接记忆库…</span>
+        <button id="store-info" class="secondary" title="查看存储位置">存储位置</button>
+      </div>
+    </header>
     <div class="workspace">
       <aside class="sidebar" aria-label="记忆列表">
-        <header class="brand">
-          <span class="brand-mark">M</span>
-          <div>
-            <span class="brand-name">MyCortex</span
-            ><span class="brand-caption">你的个人记忆库</span>
-          </div>
-        </header>
-        <div class="collection-head">
-          <h1>记忆</h1>
-          <button id="new" class="primary compact">＋ 新增记忆</button>
-        </div>
-        <label class="search-box"
-          ><span aria-hidden="true">⌕</span
-          ><input
-            id="search"
-            type="search"
-            placeholder="搜索内容、标题或来源"
-            aria-label="搜索记忆"
-            maxlength="605"
-          /><kbd>/</kbd></label
-        >
+        <button id="new" class="primary new-button">
+          <span aria-hidden="true">＋</span> 新增记忆
+        </button>
+        <div class="collection-head"><h1>我的记忆</h1></div>
         <div class="list-heading">
           <span id="list-caption">最近保存</span
           ><button id="refresh" class="text-button" title="刷新记忆列表">刷新</button>
@@ -44,20 +61,36 @@
           <button id="previous" class="text-button">← 上一页</button><span id="page-number"></span
           ><button id="next" class="text-button">下一页 →</button>
         </div>
-        <footer class="sidebar-footer">
-          <span id="connection" role="status">正在连接记忆库…</span
-          ><button id="store-info" class="text-button" title="查看存储位置">存储位置</button>
-        </footer>
+        <footer class="sidebar-footer">本机记忆库</footer>
       </aside>
       <main id="main">
         <header class="main-top">
           <button id="back" class="text-button">← 记忆列表</button
-          ><span class="view-label">已保存的记忆</span>
+          ><span class="view-label">记忆详情</span>
         </header>
         <div id="message" role="status" hidden></div>
         <section id="empty" class="empty-state">
-          <h2>选择一条记忆</h2>
-          <p>从左侧列表查看正文、来源和历史版本，或新增记忆。</p>
+          <svg class="empty-icon" viewBox="0 0 80 80" fill="none" aria-hidden="true">
+            <rect x="14" y="9" width="43" height="54" rx="7" fill="#e8f0fe" />
+            <rect
+              x="25"
+              y="19"
+              width="42"
+              height="54"
+              rx="7"
+              fill="white"
+              stroke="#a8c7fa"
+              stroke-width="2"
+            />
+            <path
+              d="M36 35h20M36 44h20M36 53h12"
+              stroke="#0b57d0"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
+          <h2>查看你的记忆</h2>
+          <p>选择左侧的一条记忆，查看原文和来源。<br />也可以记下新的内容。</p>
           <button id="empty-new" class="primary">＋ 新增记忆</button>
         </section>
         <section id="detail" hidden>
@@ -85,7 +118,10 @@
               <button id="return-current" class="text-button">返回当前版本 →</button>
             </div>
             <div id="body" class="body-text"></div>
-            <dl id="metadata" class="metadata"></dl>
+            <section class="source-section" aria-labelledby="source-heading">
+              <h3 id="source-heading">来源与记录信息</h3>
+              <dl id="metadata" class="metadata"></dl>
+            </section>
           </div>
           <div id="organization-panel" class="detail-content" hidden></div>
           <div id="history-panel" class="detail-content" hidden></div>

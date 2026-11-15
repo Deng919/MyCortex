@@ -437,6 +437,13 @@ $("next").addEventListener("click", () => {
 });
 let searchTimer;
 $("search").addEventListener("input", () => {
+  if (innerWidth <= 650) {
+    ++detailRequest;
+    const historical = !$("historical-banner").hidden;
+    $("edit").disabled = !current || historical || current.kind !== "text";
+    $("delete").disabled = !current || historical;
+    document.querySelector(".workspace").classList.remove("detail-open");
+  }
   ++listRequest;
   clearTimeout(searchTimer);
   page = 0;
