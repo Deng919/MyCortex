@@ -256,6 +256,19 @@ export class KnowledgeStore {
     });
   }
 
+  findByRequestKey(requestKey: string): Material | null {
+    const row = this.rows(
+      this.query.selectFrom("materials").selectAll().where("requestKey", "=", requestKey),
+    )[0];
+    if (!row) {
+      return null;
+    }
+    if (row.deletedAt) {
+      throw new Error("Request refers to a deleted material");
+    }
+    return this.read(row.id);
+  }
+
   read(id: string, revision?: number): Material {
     const current = this.current(id);
     const selected = revision ?? current.currentRevision;

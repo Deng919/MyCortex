@@ -148,6 +148,26 @@ Set-Content -Encoding utf8 D:\Cache\MyCortex\demo-note.txt '合成材料：测�
 
 链接保存成功只表示 URI 已保存，网页正文没有抓取或备份。
 
+## QQ Digest 导入
+
+QQ Digest 保留完整 QQ 归档，只有已经确认并实际写入 QQ Digest 知识库的候选才导出。先在 QQ Digest 项目执行：
+
+```powershell
+D:\CodexTools\python\Scripts\qq-digest.exe export-mycortex `
+  --config-path D:\Dev\QQDigest\config\config.yaml `
+  --out D:\Cache\MyCortex\qqdigest-2026-11-15.json
+```
+
+然后导入同一 MyCortex store：
+
+```powershell
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo init
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo import-qqdigest `
+  --file D:\Cache\MyCortex\qqdigest-2026-11-15.json
+```
+
+导入材料正文中保留候选正文、筛选理由和有限原消息上下文，来源为 `qqdigest://...` URI。每个候选使用 `qqdigest:candidate:<id>` 作为稳定请求编号：重复导入不重复建条目，正文变化会记录为新的 MyCortex 修订。bundle 和目标数据库必须由操作者显式指定；该命令不读取 QQ 数据库，也不接收 pending、later 或 ignored 候选。
+
 ## 纠正、历史和删除
 
 ```powershell

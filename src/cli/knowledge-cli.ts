@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Command } from "commander";
 import { withKnowledgeStore } from "../knowledge/access.js";
 import { MAX_BODY_BYTES, MAX_EXPORT_BYTES } from "../knowledge/contract.js";
+import { importQqDigestBundle } from "../knowledge/qqdigest-import.js";
 import { mergeDeletionLedger } from "../knowledge/recovery.js";
 import type { KnowledgeStore } from "../knowledge/store.js";
 
@@ -103,6 +104,16 @@ export function registerKnowledgeCli(program: Command): void {
       );
     },
   );
+
+  knowledge
+    .command("import-qqdigest")
+    .description("Import confirmed QQ Digest candidates with stable, idempotent request keys")
+    .requiredOption("--file <path>", "QQ Digest MyCortex bundle, at most 32 MiB")
+    .action(async (options: { file: string }) => {
+      const raw = JSON.parse(await readUtf8(options.file, MAX_EXPORT_BYTES));
+      return use(false, (store) => importQqDigestBundle(store, raw));
+    });
+
   metadata(
     knowledge.command("reference").description("Save a source link only, without fetching content"),
   ).action(
