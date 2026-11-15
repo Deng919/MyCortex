@@ -17,7 +17,6 @@
             <span class="brand-name">MyCortex</span
             ><span class="brand-caption">你的个人记忆库</span>
           </div>
-          <span class="local-badge">本机</span>
         </header>
         <div class="collection-head">
           <h1>记忆</h1>
@@ -46,23 +45,20 @@
           ><button id="next" class="text-button">下一页 →</button>
         </div>
         <footer class="sidebar-footer">
-          <span class="status-dot"></span><span id="connection">正在连接记忆库…</span
+          <span id="connection" role="status">正在连接记忆库…</span
           ><button id="store-info" class="text-button" title="查看存储位置">存储位置</button>
         </footer>
       </aside>
       <main id="main">
         <header class="main-top">
           <button id="back" class="text-button">← 记忆列表</button
-          ><span class="eyebrow">个人空间 <span>/</span> 已保存的记忆</span
-          ><span class="top-note">记下的，随时找回。</span>
+          ><span class="view-label">已保存的记忆</span>
         </header>
         <div id="message" role="status" hidden></div>
         <section id="empty" class="empty-state">
-          <div class="empty-symbol" aria-hidden="true">≡</div>
-          <h2>给记忆一个安放的地方</h2>
-          <p>选择一条记忆，查看内容、来源和历史。<br />也可以添加一段现在想留下的话。</p>
-          <button id="empty-new" class="primary">＋ 新增记忆</button
-          ><span class="empty-footnote">与连接到同一知识库的 AI 共享保存内容</span>
+          <h2>选择一条记忆</h2>
+          <p>从左侧列表查看正文、来源和历史版本，或新增记忆。</p>
+          <button id="empty-new" class="primary">＋ 新增记忆</button>
         </section>
         <section id="detail" hidden>
           <div class="detail-header">
@@ -96,11 +92,10 @@
         </section>
       </main>
     </div>
-    <dialog id="editor">
+    <dialog id="editor" aria-labelledby="editor-title" aria-describedby="edit-description">
       <form id="edit-form">
         <div class="dialog-heading">
           <div>
-            <span class="eyebrow">MYCORTEX</span>
             <h2 id="editor-title">新增记忆</h2>
           </div>
           <button type="button" id="close-editor" class="icon-button" aria-label="关闭编辑">
@@ -110,7 +105,7 @@
         <p id="edit-description" class="muted"></p>
         <div id="new-fields">
           <label
-            >标题<input id="input-title" maxlength="300" placeholder="给这段记忆起个名字" required
+            >标题<input id="input-title" maxlength="300" placeholder="例如：周末读书计划" required
           /></label>
           <div class="field-row">
             <label
@@ -149,12 +144,15 @@
         </div>
       </form>
     </dialog>
-    <dialog id="delete-dialog">
+    <dialog
+      id="delete-dialog"
+      aria-labelledby="delete-heading"
+      aria-describedby="delete-description"
+    >
       <form id="delete-form">
-        <div class="delete-icon" aria-hidden="true">−</div>
-        <h2>删除这条记忆？</h2>
+        <h2 id="delete-heading">删除这条记忆？</h2>
         <p id="delete-title"></p>
-        <p class="muted">
+        <p id="delete-description" class="muted">
           正文、整理结果和全部历史版本都会从本库清除，无法撤销。原始文件不受影响。
         </p>
         <p id="delete-error" class="form-error" role="alert" hidden></p>
@@ -164,8 +162,8 @@
         </div>
       </form>
     </dialog>
-    <dialog id="store-dialog">
-      <h2>记忆存储位置</h2>
+    <dialog id="store-dialog" aria-labelledby="store-heading">
+      <h2 id="store-heading">记忆存储位置</h2>
       <p class="muted">客户端与指向同一目录的 MCP 连接共享数据。</p>
       <p id="store-path" class="path"></p>
       <form method="dialog"><button class="primary">知道了</button></form>

@@ -277,7 +277,7 @@ function openEditor(mode) {
   $("editor-title").textContent = mode === "new" ? "新增记忆" : "编辑记忆";
   $("edit-description").textContent =
     mode === "new"
-      ? "保留此刻想留下的内容，之后随时查看。"
+      ? "保存文字或来源链接。文字支持修改，并保留历史版本。"
       : "修改正文后会创建新版本；标题、来源与原作者保留，旧版本仍可查看。";
   $("save").textContent = mode === "new" ? "保存记忆" : "保存修改";
   requestKey = crypto.randomUUID();
