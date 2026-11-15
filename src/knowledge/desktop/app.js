@@ -143,11 +143,8 @@ function tab(name) {
 function renderDetail(historical) {
   $("empty").hidden = true;
   $("detail").hidden = false;
-  $("title").textContent = current.title;
   $("kind").textContent = current.kind === "text" ? "文字记忆" : "来源链接";
   $("saved-date").textContent = date(current.recordedAt, true);
-  $("version-label").textContent =
-    `版本 ${current.revision} · ${historical ? "历史内容，只读" : "当前保存的内容"}`;
   $("edit").disabled = historical || current.kind !== "text";
   $("edit").title =
     current.kind === "reference" ? "链接未保存正文，可新增文字记忆" : "修改正文并保留历史版本";

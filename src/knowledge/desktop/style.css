@@ -371,6 +371,11 @@ main {
   color: var(--muted);
 }
 .detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
   padding: 40px 44px 24px;
 }
 .detail-label {
@@ -390,34 +395,11 @@ main {
   font-size: 12px;
   line-height: 1.5;
 }
-.title-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  align-items: flex-start;
-  margin-top: 18px;
-}
-.title-row h2 {
-  min-width: 0;
-  margin: 0;
-  font-size: 30px;
-  font-weight: 500;
-  line-height: 1.5;
-  letter-spacing: -0.7px;
-  overflow-wrap: anywhere;
-}
 .actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding-top: 2px;
-}
-.version-label {
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--muted);
-  margin: 12px 0 0;
 }
 .tabs {
   display: flex;
@@ -720,13 +702,6 @@ textarea {
   .detail-header {
     padding: 30px 28px 22px;
   }
-  .title-row {
-    flex-direction: column;
-    gap: 16px;
-  }
-  .title-row h2 {
-    font-size: 28px;
-  }
   .tabs {
     padding: 0 28px;
   }
@@ -784,9 +759,6 @@ textarea {
     flex-wrap: wrap;
     gap: 5px;
   }
-  .title-row h2 {
-    font-size: 25px;
-  }
   .tabs {
     gap: 22px;
   }
@@ -843,12 +815,6 @@ textarea {
   }
   #message {
     margin: 14px 22px 0;
-  }
-  .title-row {
-    gap: 16px;
-  }
-  .title-row h2 {
-    font-size: 25px;
   }
   .source-section {
     margin-top: 36px;
