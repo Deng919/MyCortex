@@ -13,7 +13,7 @@ const timestamp = z.iso.datetime({ offset: true });
 
 const candidateSchema = z.strictObject({
   candidateId: z.number().int().positive(),
-  candidateRevision: z.number().int().positive(),
+  candidateRevision: z.number().int().nonnegative(),
   requestKey: z
     .string()
     .regex(/^qqdigest:candidate:[1-9]\d*$/)

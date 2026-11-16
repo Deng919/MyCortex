@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { importQqDigestBundle } from "./qqdigest-import.js";
 import { KnowledgeStore } from "./store.js";
 
-function bundle(body = "# 教程\n\n正文") {
+function bundle(body = "# 教程\n\n正文", candidateRevision = 2) {
   return {
     format: "mycortex.qqdigest" as const,
     version: 1 as const,
@@ -14,7 +14,7 @@ function bundle(body = "# 教程\n\n正文") {
     candidates: [
       {
         candidateId: 7,
-        candidateRevision: 2,
+        candidateRevision,
         requestKey: "qqdigest:candidate:7",
         title: "教程",
         candidateType: "resource" as const,
@@ -38,15 +38,16 @@ function store() {
 }
 
 describe("QQ Digest bundle import", () => {
-  it("imports once and keeps retries idempotent", () => {
+  it.each([0, 2])("imports source revision %i and keeps retries idempotent", (revision) => {
     const knowledge = store();
-    expect(importQqDigestBundle(knowledge, bundle())).toMatchObject({
+    const raw = bundle(undefined, revision);
+    expect(importQqDigestBundle(knowledge, raw)).toMatchObject({
       candidates: 1,
       imported: 1,
       updated: 0,
       unchanged: 0,
     });
-    expect(importQqDigestBundle(knowledge, bundle())).toMatchObject({
+    expect(importQqDigestBundle(knowledge, raw)).toMatchObject({
       imported: 0,
       updated: 0,
       unchanged: 1,
