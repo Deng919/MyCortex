@@ -6,6 +6,7 @@
     <title>MyCortex · 知识</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/network-view.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -45,10 +46,17 @@
     </header>
     <div class="workspace">
       <aside class="sidebar" aria-label="知识列表">
+        <nav class="view-nav" aria-label="查看内容">
+          <button id="view-knowledge" aria-current="page">知识</button>
+          <button id="view-network">人物与关系</button>
+        </nav>
         <button id="new" class="primary new-button">
           <span aria-hidden="true">＋</span> 手写知识
         </button>
-        <div class="collection-head"><h1>我的知识</h1></div>
+        <div class="collection-head"><h1 id="collection-title">我的知识</h1></div>
+        <label class="historical-filter"
+          ><input id="include-historical" type="checkbox" /> 包含历史资料</label
+        >
         <div class="list-heading">
           <span id="list-caption">最近保存</span
           ><button id="refresh" class="text-button" title="刷新知识列表">刷新</button>
@@ -57,7 +65,7 @@
           多个关键词用空格隔开，显示最近 10 条匹配。
         </p>
         <div id="list" class="memory-list" aria-live="polite"></div>
-        <div class="pagination">
+        <div id="pagination" class="pagination">
           <button id="previous" class="text-button">← 上一页</button><span id="page-number"></span
           ><button id="next" class="text-button">下一页 →</button>
         </div>
@@ -123,6 +131,12 @@
           </div>
           <div id="history-panel" class="detail-content" hidden></div>
         </section>
+        <section
+          id="network-detail"
+          class="detail-content network-detail"
+          hidden
+          aria-live="polite"
+        ></section>
       </main>
     </div>
     <dialog id="editor" aria-labelledby="editor-title" aria-describedby="edit-description">
@@ -136,14 +150,14 @@
           </button>
         </div>
         <p id="edit-description" class="muted"></p>
+        <label
+          >知识摘要<input
+            id="input-title"
+            maxlength="300"
+            placeholder="用一句话概括已提炼的知识"
+            required
+        /></label>
         <div id="new-fields">
-          <label
-            >知识摘要<input
-              id="input-title"
-              maxlength="300"
-              placeholder="用一句话概括已提炼的知识"
-              required
-          /></label>
           <div class="field-row">
             <label
               >类型<select id="input-kind">

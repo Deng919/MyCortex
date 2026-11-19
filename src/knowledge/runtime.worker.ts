@@ -24,9 +24,15 @@ function execute(
     case "read":
       return store.readSlice(command.input.id, command.input);
     case "search":
-      return store.searchMany(command.input.terms, command.input.limit);
+      return store.searchMany(
+        command.input.terms,
+        command.input.limit,
+        command.input.includeHistorical,
+      );
     case "list":
-      return store.list(command.input.limit, command.input.offset);
+      return store.list(command.input.limit, command.input.offset, command.input.includeHistorical);
+    case "network":
+      return store.network(command.input);
     case "history":
       return store.history(command.input.id);
     case "pending":
@@ -66,6 +72,18 @@ serveWorkerTasks<KnowledgeWorkerReply, KnowledgeWorkerInput>((input, _channel, c
             await fs.stat(path.join(input.directory, "knowledge.sqlite"));
           } catch (error) {
             if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+              if (input.command.operation === "network") {
+                return {
+                  ok: true,
+                  value: {
+                    privacyLevel: "normal",
+                    entities: [],
+                    relations: [],
+                    conversations: [],
+                    truncated: false,
+                  },
+                };
+              }
               if (
                 input.command.operation === "list" ||
                 input.command.operation === "search" ||

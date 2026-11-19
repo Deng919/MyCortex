@@ -22,6 +22,11 @@ it.each<KnowledgeCapability[]>([["read"], ["submit"], ["read", "submit"], ["mana
       await Promise.all([service.server.connect(inbound), client.connect(outbound)]);
       const instructions = client.getInstructions() ?? "";
       const tools = (await client.listTools()).tools;
+      if (capabilities.includes("read")) {
+        expect(instructions).toMatch(/speaker.*addressee/i);
+        expect(instructions).toMatch(/includeHistorical/);
+        expect(instructions).toMatch(/inferred/);
+      }
       for (const [capability, name, guidance] of [
         ["read", "knowledge_read", /Before personalizing/],
         ["submit", "knowledge_write", /Automatically save/],
@@ -59,6 +64,25 @@ it("exposes the same durable knowledge tools over MCP with a host-owned read-onl
     expect(listed.content).toContainEqual(
       expect.objectContaining({ type: "text", text: expect.stringContaining('"results": []') }),
     );
+    const network = await client.callTool({
+      name: "knowledge_read",
+      arguments: { action: "network", limit: 50, includeHistorical: true },
+    });
+    expect(network.isError).not.toBe(true);
+    expect(network.content).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining('"truncated": false'),
+      }),
+    );
+    expect(
+      (
+        await client.callTool({
+          name: "knowledge_read",
+          arguments: { action: "network", limit: 51 },
+        })
+      ).isError,
+    ).toBe(true);
     const denied = await client.callTool({
       name: "knowledge_write",
       arguments: { action: "delete", id: "untrusted" },

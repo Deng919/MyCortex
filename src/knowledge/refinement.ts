@@ -23,12 +23,17 @@ export function prepareKnowledgeSubmission(raw: Submission, refinement?: Knowled
     return null;
   }
   const sourceFingerprint = createHash("sha256").update(JSON.stringify(source)).digest("hex");
+  const entities = new Map(knowledge.entities?.map((entity) => [entity.id, entity.name]));
+  const names = (ids: string[] | undefined) => ids?.map((id) => entities.get(id)!).join("、");
   const body = knowledge.entries
     .map((entry) =>
       [
         `## ${entry.summary}`,
         `归属：${entry.subject}`,
         `立场：${stances[entry.stance]}`,
+        ...(entry.speakerIds?.length ? [`说话者：${names(entry.speakerIds)}`] : []),
+        ...(entry.addresseeIds?.length ? [`交流对象：${names(entry.addresseeIds)}`] : []),
+        ...(entry.aboutIds?.length ? [`谈及对象：${names(entry.aboutIds)}`] : []),
         ...(entry.timeText ? [`来源中的时间表述：${entry.timeText}`] : []),
         "",
         "依据原话：",
@@ -42,7 +47,7 @@ export function prepareKnowledgeSubmission(raw: Submission, refinement?: Knowled
     input: submissionSchema.parse({
       ...source,
       title: knowledge.entries[0]!.summary.slice(0, 240),
-      body: `${knowledge.topics.length ? `主题：${knowledge.topics.join("、")}\n\n` : ""}${body}\n\n来源：${source.sourceUri}`,
+      body: `${knowledge.topics.length ? `主题：${knowledge.topics.join("、")}\n\n` : ""}${knowledge.context ? `交流语境：${knowledge.context.summary}\n参与者：${names(knowledge.context.participantIds)}\n\n` : ""}${body}\n\n来源：${source.sourceUri}`,
     }),
   };
 }

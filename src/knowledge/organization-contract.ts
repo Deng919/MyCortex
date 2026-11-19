@@ -1,20 +1,66 @@
 import { z } from "zod";
+import { conversationContextSchema, entryRoles, knowledgeEntitySchema } from "./social-contract.js";
 
 /** These labels describe an interpretation of a source, never verified reality. */
-export const organizationSchema = z.strictObject({
-  topics: z.array(z.string().trim().min(1).max(80)).max(5),
-  entries: z
-    .array(
-      z.strictObject({
-        summary: z.string().trim().min(1).max(500),
-        subject: z.string().trim().min(1).max(160),
-        stance: z.enum(["explicit", "intent", "uncertain", "other-view"]),
-        quote: z.string().min(1).max(2000),
-        timeText: z.string().min(1).max(160).nullable(),
-      }),
-    )
-    .max(8),
-});
+export const organizationSchema = z
+  .strictObject({
+    topics: z.array(z.string().trim().min(1).max(80)).max(5),
+    privacyLevel: z.enum(["normal", "personal", "highly-sensitive"]).optional(),
+    entities: z.array(knowledgeEntitySchema).max(24).optional(),
+    context: conversationContextSchema.optional(),
+    relevance: z.enum(["current", "background", "historical"]).optional(),
+    entries: z
+      .array(
+        z.strictObject({
+          summary: z.string().trim().min(1).max(500),
+          subject: z.string().trim().min(1).max(160),
+          stance: z.enum(["explicit", "intent", "uncertain", "other-view"]),
+          quote: z.string().min(1).max(2000),
+          timeText: z.string().min(1).max(160).nullable(),
+          ...entryRoles,
+        }),
+      )
+      .max(8),
+  })
+  .superRefine((organization, context) => {
+    const entities = organization.entities ?? [];
+    const ids = new Set(entities.map((entity) => entity.id));
+    if (ids.size !== entities.length) {
+      context.addIssue({ code: "custom", message: "Duplicate entity identity" });
+    }
+    const references = [
+      ...(organization.context?.participantIds ?? []),
+      ...(organization.context?.relatedIds ?? []),
+      ...organization.entries.flatMap((entry) => [
+        ...(entry.speakerIds ?? []),
+        ...(entry.addresseeIds ?? []),
+        ...(entry.aboutIds ?? []),
+        ...(entry.relation
+          ? [
+              entry.relation.fromId,
+              entry.relation.toId,
+              ...(entry.relation.scopeId ? [entry.relation.scopeId] : []),
+            ]
+          : []),
+      ]),
+    ];
+    if (references.some((reference) => !ids.has(reference))) {
+      context.addIssue({ code: "custom", message: "Knowledge references an unknown entity" });
+    }
+  });
+
+/** Dialogue identity survives edits; claims and relationship interpretations do not. */
+export function organizationMetadata(organization: KnowledgeOrganization | null) {
+  if (!organization) {
+    return {};
+  }
+  return {
+    ...(organization.privacyLevel ? { privacyLevel: organization.privacyLevel } : {}),
+    ...(organization.entities ? { entities: organization.entities } : {}),
+    ...(organization.context ? { context: organization.context } : {}),
+    ...(organization.relevance ? { relevance: organization.relevance } : {}),
+  };
+}
 
 export type KnowledgeOrganization = z.output<typeof organizationSchema>;
 

@@ -33,6 +33,7 @@ export const submissionSchema = z
   });
 
 export const correctionSchema = z.strictObject({
+  title: z.string().trim().min(1).max(300).optional(),
   body: body.refine((value) => value.trim().length > 0, "Correction needs a body"),
   note: z.string().trim().min(1).max(2000),
   submittedBy: label,

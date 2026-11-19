@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- storage owns the complete transaction lifecycle and its derived projections. */
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
@@ -18,34 +19,34 @@ import {
   type MaterialRow,
   type Submission,
 } from "./contract.js";
+import { type NetworkOptions } from "./network.js";
 import {
   organizationResultSchema,
   organizationSchema,
+  organizationMetadata,
   validateOrganization,
   type OrganizationResult,
   type OrganizationRow,
   type KnowledgeOrganization,
 } from "./organization-contract.js";
 import { prepareKnowledgeSubmission, sourceFingerprintFromNote } from "./refinement.js";
+import { readKnowledgeNetwork } from "./store-network.js";
 import {
   importKnowledgeBundle,
   listDeletions,
   type KnowledgeRecoveryContext,
 } from "./store-recovery.js";
 import { initializeKnowledgeStore } from "./store-schema.js";
-
 function positiveRevision(value: number): void {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new Error("Expected a positive revision");
   }
 }
-
 /** Synchronous storage owner; runtime callers execute it in the knowledge worker. */
 export class KnowledgeStore {
   private readonly db: DatabaseSync;
   private readonly query;
   private readonly beforeCommit?: () => void;
-
   constructor(filename: string, options: { create?: boolean; beforeCommit?: () => void } = {}) {
     this.beforeCommit = options.beforeCommit;
     const exists = fs.existsSync(filename);
@@ -67,11 +68,9 @@ export class KnowledgeStore {
       throw error;
     }
   }
-
   private rows<T>(statement: Compilable<T>): T[] {
     return executeSqliteQuerySync(this.db, statement).rows;
   }
-
   private transaction<T>(operation: () => T): T {
     return runSqliteImmediateTransactionSync(this.db, operation, {
       withCommit: (commit) => {
@@ -80,7 +79,6 @@ export class KnowledgeStore {
       },
     });
   }
-
   private current(id: string): MaterialRow {
     const row = this.rows(this.query.selectFrom("materials").selectAll().where("id", "=", id))[0];
     if (!row) {
@@ -91,13 +89,23 @@ export class KnowledgeStore {
     }
     return row;
   }
-
   private queueOrganization(materialId: string, sourceRevision: number): void {
+    const previous = this.rows(
+      this.query
+        .selectFrom("organizations")
+        .select("organization")
+        .where("materialId", "=", materialId),
+    )[0];
+    const metadata = organizationMetadata(
+      previous?.organization ? organizationSchema.parse(JSON.parse(previous.organization)) : null,
+    );
     const values = {
       sourceRevision,
       revision: 1,
       status: "pending" as const,
-      organization: null,
+      organization: Object.keys(metadata).length
+        ? JSON.stringify({ ...metadata, topics: [], entries: [] })
+        : null,
       processor: null,
       manual: 0,
       updatedAt: new Date().toISOString(),
@@ -109,7 +117,6 @@ export class KnowledgeStore {
         .onConflict((conflict) => conflict.column("materialId").doUpdateSet(values)),
     );
   }
-
   private organizationView(row: OrganizationRow) {
     return {
       status: row.status,
@@ -122,7 +129,6 @@ export class KnowledgeStore {
       updatedAt: row.updatedAt,
     };
   }
-
   organization(id: string) {
     const current = this.current(id);
     const row = this.rows(
@@ -144,7 +150,6 @@ export class KnowledgeStore {
     }
     return this.organizationView(row);
   }
-
   pendingOrganizations(limit = 3): Material[] {
     if (!Number.isInteger(limit) || limit < 1 || limit > 10) {
       throw new Error("Pending organization limit must be 1–10");
@@ -163,7 +168,6 @@ export class KnowledgeStore {
     );
     return pending.map(({ id }) => this.read(id));
   }
-
   commitOrganization(
     id: string,
     expectedRevision: number,
@@ -201,10 +205,14 @@ export class KnowledgeStore {
       ) {
         throw new Error("Organization is already completed or manually corrected");
       }
+      const metadata = organizationMetadata(previous.organization);
       const organization =
-        result.organization === undefined
+        result.organization === undefined && !Object.keys(metadata).length
           ? null
-          : validateOrganization(result.organization, source.body);
+          : validateOrganization(
+              { ...metadata, topics: [], entries: [], ...result.organization },
+              source.body,
+            );
       this.rows(
         this.query
           .updateTable("organizations")
@@ -222,13 +230,11 @@ export class KnowledgeStore {
       return this.organization(id);
     });
   }
-
   /** Low-level registration for legacy store/recovery fixtures, never source ingestion. */
   submit(raw: Submission): Material {
     const input = submissionSchema.parse(raw);
     return this.saveSubmission(input);
   }
-
   /** Production source inputs pass here; unrefined source text is never persisted. */
   submitKnowledge(raw: Submission, refinement?: KnowledgeOrganization): Material | null {
     const prepared = prepareKnowledgeSubmission(raw, refinement);
@@ -236,7 +242,6 @@ export class KnowledgeStore {
       ? this.saveSubmission(prepared.input, prepared.sourceFingerprint, prepared.refinement)
       : null;
   }
-
   /** A source refresh cannot replace knowledge the user has corrected. */
   updateKnowledge(
     id: string,
@@ -293,7 +298,6 @@ export class KnowledgeStore {
       return this.read(id);
     });
   }
-
   private saveRefinement(
     materialId: string,
     sourceRevision: number,
@@ -316,7 +320,6 @@ export class KnowledgeStore {
         .onConflict((conflict) => conflict.column("materialId").doUpdateSet(values)),
     );
   }
-
   private saveSubmission(
     input: ReturnType<typeof submissionSchema.parse>,
     sourceFingerprint?: string,
@@ -367,7 +370,6 @@ export class KnowledgeStore {
       return this.read(id);
     });
   }
-
   findByRequestKey(requestKey: string): Material | null {
     const row = this.rows(
       this.query.selectFrom("materials").selectAll().where("requestKey", "=", requestKey),
@@ -380,7 +382,6 @@ export class KnowledgeStore {
     }
     return this.read(row.id);
   }
-
   read(id: string, revision?: number): Material {
     const current = this.current(id);
     const selected = revision ?? current.currentRevision;
@@ -398,7 +399,6 @@ export class KnowledgeStore {
     const { materialId: _materialId, ...content } = row;
     return { id, requestKey: current.requestKey, ...content };
   }
-
   readSlice(id: string, options: { revision?: number; offset?: number; length?: number } = {}) {
     const offset = options.offset ?? 0;
     const length = options.length ?? 3000;
@@ -423,12 +423,17 @@ export class KnowledgeStore {
       truncated: offset > 0 || offset + length < totalLength,
     };
   }
-
-  private summaries() {
+  private summaries(includeHistorical = false) {
+    if (typeof includeHistorical !== "boolean") {
+      throw new Error("includeHistorical must be boolean");
+    }
     return this.query
       .selectFrom("materials as m")
       .innerJoin("revisions as r", (join) =>
         join.onRef("r.materialId", "=", "m.id").onRef("r.revision", "=", "m.currentRevision"),
+      )
+      .leftJoin("organizations as o", (join) =>
+        join.onRef("o.materialId", "=", "m.id").onRef("o.sourceRevision", "=", "m.currentRevision"),
       )
       .select([
         "m.id",
@@ -440,10 +445,14 @@ export class KnowledgeStore {
         "r.observedAt",
         "r.recordedAt",
       ])
-      .where("m.deletedAt", "is", null);
+      .where("m.deletedAt", "is", null)
+      .$if(!includeHistorical, (query) =>
+        query.where(
+          sql<boolean>`coalesce(json_extract(o.organization, '$.relevance'), 'background') <> 'historical'`,
+        ),
+      );
   }
-
-  list(limit = 10, offset = 0) {
+  list(limit = 10, offset = 0, includeHistorical = false) {
     if (
       !Number.isInteger(limit) ||
       limit < 1 ||
@@ -454,7 +463,7 @@ export class KnowledgeStore {
       throw new Error("List needs limit 1–20 and a nonnegative offset");
     }
     return this.rows(
-      this.summaries()
+      this.summaries(includeHistorical)
         .select(sql<string>`substr(r.body, 1, 240)`.as("excerpt"))
         .orderBy("r.recordedAt", "desc")
         .orderBy("m.id")
@@ -462,8 +471,7 @@ export class KnowledgeStore {
         .offset(offset),
     );
   }
-
-  searchMany(terms: string[], limit = 5) {
+  searchMany(terms: string[], limit = 5, includeHistorical = false) {
     if (
       !Array.isArray(terms) ||
       terms.length < 1 ||
@@ -481,12 +489,7 @@ export class KnowledgeStore {
     );
     const folded = terms.map((term) => term.toLowerCase());
     return this.rows(
-      this.summaries()
-        .leftJoin("organizations as o", (join) =>
-          join
-            .onRef("o.materialId", "=", "m.id")
-            .onRef("o.sourceRevision", "=", "m.currentRevision"),
-        )
+      this.summaries(includeHistorical)
         .select([
           "o.status as organizationStatus",
           "o.revision as organizationRevision",
@@ -539,8 +542,7 @@ export class KnowledgeStore {
         }),
     );
   }
-
-  search(term: string, limit = 20) {
+  search(term: string, limit = 20, includeHistorical = false) {
     if (typeof term !== "string" || !term.trim() || term.length > 300) {
       throw new Error("Search needs 1–300 characters");
     }
@@ -548,23 +550,8 @@ export class KnowledgeStore {
       throw new Error("Search limit must be 1–50");
     }
     return this.rows(
-      this.query
-        .selectFrom("materials as m")
-        .innerJoin("revisions as r", (join) =>
-          join.onRef("r.materialId", "=", "m.id").onRef("r.revision", "=", "m.currentRevision"),
-        )
-        .select([
-          "m.id",
-          "r.revision",
-          "r.title",
-          "r.kind",
-          "r.sourceUri",
-          "r.author",
-          "r.observedAt",
-          "r.recordedAt",
-          sql<string>`substr(r.body, max(1, instr(r.body, ${term}) - 80), 240)`.as("excerpt"),
-        ])
-        .where("m.deletedAt", "is", null)
+      this.summaries(includeHistorical)
+        .select(sql<string>`substr(r.body, max(1, instr(r.body, ${term}) - 80), 240)`.as("excerpt"))
         .where((eb) =>
           eb.or([
             eb(eb.fn<number>("instr", ["r.body", eb.val(term)]), ">", 0),
@@ -577,7 +564,9 @@ export class KnowledgeStore {
         .limit(limit),
     );
   }
-
+  network(options: NetworkOptions = {}) {
+    return readKnowledgeNetwork(this.query, (statement) => this.rows(statement), options);
+  }
   history(id: string) {
     this.current(id);
     return this.rows(
@@ -589,7 +578,6 @@ export class KnowledgeStore {
         .limit(50),
     );
   }
-
   correct(id: string, expectedRevision: number, raw: Correction): Material {
     positiveRevision(expectedRevision);
     const input = correctionSchema.parse(raw);
@@ -622,7 +610,6 @@ export class KnowledgeStore {
       return this.read(id);
     });
   }
-
   remove(id: string, expectedRevision: number): void {
     positiveRevision(expectedRevision);
     this.transaction(() => {
@@ -640,7 +627,6 @@ export class KnowledgeStore {
       );
     });
   }
-
   export(): KnowledgeBundle {
     return runSqliteImmediateTransactionSync(this.db, () => {
       // The byte-length aggregate bounds data before transferring bodies into JavaScript.
@@ -692,15 +678,12 @@ export class KnowledgeStore {
       return bundle;
     });
   }
-
   deletions(): MaterialRow[] {
     return listDeletions(this.recoveryContext());
   }
-
   import(raw: unknown): void {
     importKnowledgeBundle(this.recoveryContext(), raw);
   }
-
   private recoveryContext(): KnowledgeRecoveryContext {
     return {
       db: this.db,
@@ -709,7 +692,6 @@ export class KnowledgeStore {
       transaction: <T>(operation: () => T) => this.transaction(operation),
     };
   }
-
   close(): void {
     this.db.close();
   }

@@ -1,5 +1,6 @@
 import type { MessagePort } from "node:worker_threads";
 import type { Correction, Material, Submission } from "./contract.js";
+import type { NetworkOptions } from "./network.js";
 import type { OrganizationResult, KnowledgeOrganization } from "./organization-contract.js";
 import type { KnowledgeStore } from "./store.js";
 
@@ -9,8 +10,9 @@ export type KnowledgeCommand =
       operation: "read";
       input: { id: string; revision?: number; offset?: number; length?: number };
     }
-  | { operation: "search"; input: { terms: string[]; limit?: number } }
-  | { operation: "list"; input: { limit?: number; offset?: number } }
+  | { operation: "search"; input: { terms: string[]; limit?: number; includeHistorical?: boolean } }
+  | { operation: "list"; input: { limit?: number; offset?: number; includeHistorical?: boolean } }
+  | { operation: "network"; input: NetworkOptions }
   | { operation: "history"; input: { id: string } }
   | {
       operation: "correct";
@@ -35,6 +37,7 @@ export type KnowledgeOutputs = {
   read: ReturnType<KnowledgeStore["readSlice"]>;
   search: ReturnType<KnowledgeStore["searchMany"]>;
   list: ReturnType<KnowledgeStore["list"]>;
+  network: ReturnType<KnowledgeStore["network"]>;
   history: ReturnType<KnowledgeStore["history"]>;
   correct: Material;
   delete: { deleted: true; id: string };

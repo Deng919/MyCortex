@@ -12,9 +12,11 @@ const correction = correctionSchema
   .omit({ submittedBy: true })
   .extend({ expectedRevision: revision });
 const deletion = z.strictObject({ expectedRevision: revision });
+const historicalFilter = z.enum(["true", "false"]).transform((value) => value === "true");
 const assets = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
+  ["/network-view.js", ["network-view.js", "text/javascript; charset=utf-8"]],
   ["/style.css", ["style.css", "text/css; charset=utf-8"]],
 ]);
 
@@ -98,13 +100,41 @@ export async function startKnowledgeDesktop(options: { directory: string; port?:
         json({ directory });
         return;
       }
+      if (url.pathname === "/api/network" && request.method === "GET") {
+        json(
+          await client.execute(
+            {
+              operation: "network",
+              input: {
+                entityId: url.searchParams.get("entityId") ?? undefined,
+                includeHistorical: historicalFilter.parse(
+                  url.searchParams.get("includeHistorical") ?? "false",
+                ),
+                limit: url.searchParams.has("limit")
+                  ? z.coerce.number().int().min(1).max(50).parse(url.searchParams.get("limit"))
+                  : 50,
+                offset: z.coerce
+                  .number()
+                  .int()
+                  .min(0)
+                  .parse(url.searchParams.get("offset") ?? 0),
+              },
+            },
+            authority,
+          ),
+        );
+        return;
+      }
       if (url.pathname === "/api/materials") {
         if (request.method === "GET") {
+          const includeHistorical = historicalFilter.parse(
+            url.searchParams.get("includeHistorical") ?? "false",
+          );
           const q = url.searchParams.get("q")?.trim() ?? "";
           if (q) {
             const terms = z.array(z.string().min(1).max(100)).min(1).max(6).parse(q.split(/\s+/u));
             const items = await client.execute(
-              { operation: "search", input: { terms, limit: 10 } },
+              { operation: "search", input: { terms, limit: 10, includeHistorical } },
               authority,
             );
             json({ items, search: true, hasMore: false });
@@ -115,7 +145,7 @@ export async function startKnowledgeDesktop(options: { directory: string; port?:
               .min(0)
               .parse(url.searchParams.get("offset") ?? 0);
             const items = await client.execute(
-              { operation: "list", input: { limit: 20, offset } },
+              { operation: "list", input: { limit: 20, offset, includeHistorical } },
               authority,
             );
             json({ items, search: false, hasMore: items.length === 20 });
@@ -139,6 +169,7 @@ export async function startKnowledgeDesktop(options: { directory: string; port?:
             }
             organization = {
               topics: [],
+              privacyLevel: "normal",
               entries: [
                 {
                   summary: input.title,

@@ -23,6 +23,13 @@ it("runs the material lifecycle through the actual command parser and local stor
     refinement,
     JSON.stringify({
       topics: ["电路"],
+      relevance: "historical",
+      entities: [{ id: "synthetic:circuit", name: "合成电路", kind: "project" }],
+      context: {
+        conversationId: "synthetic:lab",
+        participantIds: ["synthetic:circuit"],
+        summary: "合成实验记录",
+      },
       entries: [
         {
           summary: "电路电压为5V",
@@ -61,6 +68,32 @@ it("runs the material lifecycle through the actual command parser and local stor
   expect(saved.body).toContain("电路中电压为 5V。");
   expect(saved.body).not.toContain("合成资料：");
   const id = String(saved.id);
+  expect(await run("list")).toMatchObject({ results: [] });
+  expect(await run("list", "--include-historical")).toMatchObject({ results: [{ id }] });
+  expect(await run("search", "电路")).toMatchObject({ results: [] });
+  expect(await run("search", "电路", "--include-historical")).toMatchObject({ results: [{ id }] });
+  expect(await run("network")).toMatchObject({
+    entities: [],
+    relations: [],
+    conversations: [],
+    truncated: false,
+  });
+  expect(
+    await run(
+      "network",
+      "--entity",
+      "synthetic:circuit",
+      "--include-historical",
+      "--limit",
+      "50",
+      "--offset",
+      "0",
+    ),
+  ).toMatchObject({
+    entities: [{ id: "synthetic:circuit" }],
+    conversations: [{ conversationId: "synthetic:lab", materialId: id }],
+    truncated: false,
+  });
   expect(await run("read", id)).toMatchObject({ sourceUri: "synthetic:circuit" });
   await fs.writeFile(text, "合成纠正：电压为 3V。", "utf8");
   expect(

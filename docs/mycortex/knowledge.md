@@ -55,6 +55,18 @@
 
 `context` 按当前任务提供相关知识和依据预览，回答由同一对话模型生成。涉及个人知识时查询当前库，搜索预览总预算6,000字符，正文默认3,000、每段最多8,000字符。字面存取不另调模型。旧版 `processing` / `organize_pending` 仅用于显式配置后的知识维护，不是先保存原文的许可；本次未配置或调用本机模型。
 
+### 人物、关系与近况
+
+`organization` 可带 `entities`、`context`、`relevance` 和 `privacyLevel`（`normal`、`personal`、`highly-sensitive`）。实体保留稳定 ID、显示名、类型、别名及可选的平台身份、昵称和备注；同名或跨平台账号须有来源依据才能合并，备注保留为来源称呼。`context` 保存会话 ID、参与者 ID 与简短语境；每条知识可用 `speakerIds`、`addresseeIds`、`aboutIds` 区分实际说话者、接收对象与谈论对象。相关 ID 必须引用同一组织结果里的实体。
+
+关系随知识的 `relation` 保存，包含 `fromId`、`toId`、`label`、`basis` 和可选的 `scopeId`。`basis` 区分备注（`remark`）、明确陈述（`explicit`）和推断（`inferred`）；关系沿用该知识的摘要、立场、来源、修订与时间。理解发言时先结合具体说话者、接收对象、项目、关系及当时语境；未知身份保持未知，推断保留不确定性，一次事件不能直接变成长久偏好。
+
+`relevance` 为 `current`、`background` 或 `historical`，省略时按背景处理。默认 `list`、`search`、`context`、`network` 排除历史知识；只有明确需要往事时传 `includeHistorical: true`。按内容与当前情况判断价值，不设置统一过期天数。近期用户更新只替代明确变化的部分。
+
+`knowledge_read` 的 `action: "network"` 返回 `privacyLevel`、`entities`、`relations`、`conversations`、`truncated`，可选参数为 `entityId`、`includeHistorical`、`limit`（最多50）和 `offset`。它沿用 `read` 授权；在已授权的关系栏目中，实体视图会返回 scoped account identity（platform、accountScope、nativeId、nickname、remark），关系和会话携带 `materialId`、`revision`、`observedAt`。MCP/Agent 的网络响应最多约12,000字符；`truncated: true` 表示结果不完整，可按实体 ID 缩小范围，或通过 `read` 读取材料依据。分页偏移按实体计算。它从当前有效知识派生，纠正或删除材料后，相应关系同步变化。
+
+搜索/上下文预览保留各条知识的具体归属与会话参与者，不只返回第一条知识；摘要和引文仍为有界预览，需要完整依据时按材料 ID 读取。
+
 ## 文件原位保留
 
 让模型保存 `kind=reference`、空正文、`file:///D:/...` 来源的文件引用即可索引位置，不复制正文。搜索可按标题/路径定位，再用 `read_file` 在 `fileRoots` 授权范围内读取当前 UTF-8 文本。文件变更返回新的字节哈希，文件消失则报缺失；不会用旧正文冒充当前文件。拒绝越界、符号链接、硬链接、无效 UTF-8 和超过 256 KiB 的文件。
@@ -145,12 +157,18 @@ Set-Content -Encoding utf8 D:\Cache\MyCortex\demo-note.txt '合成材料：测�
 
 & .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo search '周一'
 & .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo list
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo network
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo network --entity '<实体 id>' --limit 20 --offset 0
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo list --include-historical
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo search '周一' --include-historical
 & .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo read '<返回的 id>'
 ```
 
 `--source` 是来源地址或可识别来源描述，不会自动抓取。`--author` 表示原作者，未知时可填 `unknown`；`--submitted-by` 表示转交者，默认 `local-operator`，它是来源记录，不是认证身份。`--observed-at` 可提供已知的来源时间，格式为含时区的 ISO 日期；不知道时留空，不猜测。
 
 同一 `--request` 与相同内容重复提交会返回当前材料；同编号换内容会报错。正文最多 256 KiB。当前是字面子串查询，支持中文、标点和百分号，最多返回 50 条，每条正文摘录最多 240 字符；结果是来源支持的知识解读，尚未独立核实其真实性。
+
+`list`、`search`、`network` 均输出 JSON。CLI 的 `network` 同样支持 `--include-historical`；`add --refinement` 的 JSON 可直接携带上述人物、语境和关系字段。
 
 仅保存链接：
 
@@ -256,4 +274,4 @@ node scripts/run-vitest.mjs run --config test/vitest/vitest.live.config.ts src/g
 
 旧程序遇到 v2 库会拒绝打开。需要回退旧程序时，使用升级前、已停止知识库操作时保存的整个数据库备份及配套旧程序，不要手动调低 `user_version`。当前验证对象为本机合成资料；首次升级现存原件会按条目数量写入待办记录。
 
-可移植导出使用 `mycortex.materials` v2，包含原件、修订、删除标记，以及 `organizations` 中的人工解释、视图修订、处理状态和待办。导入前逐项检查来源当前修订与原文引用。旧 v1 原件导出仍可导入，缺失的文本解释重新排队；v1 没有保存过的人工解释无法恢复。完整数据库也可在所有知识库操作停止后备份。无论采用哪种备份，恢复时都需合并最新删除账本，防止旧备份重新带回已删除原件。
+可移植导出使用 `mycortex.materials` v2，包含原件、修订、删除标记，以及 `organizations` 中的人工解释、视图修订、处理状态和待办。导入前逐项检查来源当前修订与原文引用。旧 v1 原件导出仍可导入，缺失的文本解释重新排队；v1 没有保存过的人工解释无法恢复。完整数据库也可在所有知识库操作停止后备份。无论采用哪种备份，恢复时都需合并最新删除账本，防止旧备份重新带回已删除原件。\n

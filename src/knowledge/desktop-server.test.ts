@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
+import { createKnowledgeClient } from "./client.js";
 import { startKnowledgeDesktop } from "./desktop-server.js";
+import { entityKey } from "./social-contract.js";
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => {
@@ -28,6 +30,139 @@ async function fixture() {
     });
   return { desktop, directory, request };
 }
+
+it("exposes the authenticated social network and validates history and pagination filters", async () => {
+  const { desktop, request } = await fixture();
+  expect((await fetch(`${desktop.origin}/api/network`)).status).toBe(401);
+  const result = await request("network");
+  expect(result.status).toBe(200);
+  expect(await result.json()).toEqual({
+    privacyLevel: "normal",
+    entities: [],
+    relations: [],
+    conversations: [],
+    truncated: false,
+  });
+  for (const route of [
+    "network?includeHistorical=maybe",
+    "network?limit=0",
+    "network?offset=-1",
+    "materials?includeHistorical=maybe",
+  ]) {
+    expect((await request(route)).status).toBe(400);
+  }
+}, 30000);
+
+it("returns specific dialogue context and current social evidence through HTTP, invalidating claims on correction", async () => {
+  const { request, directory } = await fixture();
+  const client = createKnowledgeClient(directory);
+  cleanup.push(() => client.close());
+  const identity = {
+    platform: "synthetic",
+    accountScope: "synthetic-owner",
+    nativeId: "synthetic-contact",
+    nickname: "小林",
+    remark: "林老师",
+  };
+  const teacherId = entityKey(identity);
+  const organization = {
+    topics: ["合成课程"],
+    privacyLevel: "personal" as const,
+    entities: [
+      { id: "self", name: "我", kind: "person" as const },
+      { id: teacherId, name: "小林", kind: "person" as const, identity },
+    ],
+    context: {
+      conversationId: "synthetic:course",
+      participantIds: ["self", teacherId],
+      summary: "与林老师讨论课程报告",
+    },
+    entries: [
+      {
+        summary: "本人称对方为林老师",
+        subject: "本人",
+        stance: "explicit" as const,
+        quote: "林老师，我计划下周交报告。",
+        timeText: null,
+        speakerIds: ["self"],
+        addresseeIds: [teacherId],
+        relation: {
+          fromId: "self",
+          toId: teacherId,
+          label: "课程老师",
+          basis: "explicit" as const,
+        },
+      },
+    ],
+  };
+  const input = {
+    requestKey: "http-social",
+    title: "合成课程报告",
+    body: "林老师，我计划下周交报告。",
+    sourceUri: "synthetic:course",
+    author: "合成用户",
+    submittedBy: "synthetic-agent",
+    kind: "text" as const,
+  };
+  const saved = await client.execute(
+    { operation: "submit", input, organization },
+    { assertCurrent() {} },
+  );
+  if (!saved) {
+    throw new Error("Synthetic knowledge was not saved");
+  }
+  await client.execute(
+    {
+      operation: "submit",
+      input: { ...input, requestKey: "http-social-old" },
+      organization: { ...organization, relevance: "historical" },
+    },
+    { assertCurrent() {} },
+  );
+  expect(await (await request("materials")).json()).toMatchObject({ items: [{ id: saved.id }] });
+  expect((await (await request("materials?includeHistorical=true")).json()).items).toHaveLength(2);
+  expect((await (await request("materials?q=林老师")).json()).items).toHaveLength(1);
+  expect(
+    (await (await request("materials?q=林老师&includeHistorical=true")).json()).items,
+  ).toHaveLength(2);
+  const graph = await (await request(`network?entityId=${encodeURIComponent(teacherId)}`)).json();
+  expect(graph.entities).toContainEqual(
+    expect.objectContaining({
+      id: teacherId,
+      nickname: "小林",
+      remark: "林老师",
+      identity,
+    }),
+  );
+  expect(graph.privacyLevel).toBe("personal");
+  expect(graph.relations).toMatchObject([
+    { materialId: saved.id, fromId: "self", toId: teacherId, basis: "explicit" },
+  ]);
+  expect(JSON.stringify(graph)).toContain(identity.accountScope);
+  expect(JSON.stringify(graph)).toContain(identity.nativeId);
+  expect((await (await request("network?includeHistorical=true")).json()).relations).toHaveLength(
+    2,
+  );
+  expect(
+    (
+      await request(`materials/${saved.id}/correct`, {
+        expectedRevision: 1,
+        title: "合成：调整报告安排",
+        body: "报告安排已经调整。",
+        note: "合成纠正",
+      })
+    ).ok,
+  ).toBe(true);
+  const corrected = await (await request(`materials/${saved.id}`)).json();
+  expect(corrected.title).toBe("合成：调整报告安排");
+  expect(corrected.organization.organization).toMatchObject({
+    context: organization.context,
+    entries: [],
+  });
+  expect((await (await request("network")).json()).relations).toEqual([]);
+  expect((await request(`materials/${saved.id}/delete`, { expectedRevision: 2 })).ok).toBe(true);
+  expect((await (await request("network")).json()).entities).toEqual([]);
+}, 30000);
 
 it("saves explicit handwritten knowledge and manages reads, corrections and deletion through HTTP", async () => {
   const { request } = await fixture();

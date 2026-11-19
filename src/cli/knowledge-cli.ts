@@ -171,20 +171,49 @@ export function registerKnowledgeCli(program: Command): void {
     .description("List current materials, newest first")
     .option("--limit <number>", "Result limit, 1–20", "10")
     .option("--offset <number>", "Pagination offset", "0")
-    .action(async (options: { limit: string; offset: string }) =>
+    .option("--include-historical", "Include historical knowledge explicitly")
+    .action(async (options: { limit: string; offset: string; includeHistorical?: boolean }) =>
       use(false, (store) => ({
-        results: store.list(Number(options.limit), Number(options.offset)),
+        results: store.list(
+          Number(options.limit),
+          Number(options.offset),
+          options.includeHistorical,
+        ),
       })),
     );
   knowledge
     .command("search <text>")
     .description("Search current original materials literally")
     .option("--limit <number>", "Result limit, 1–50", "20")
-    .action(async (text: string, options: { limit: string }) =>
+    .option("--include-historical", "Include historical knowledge explicitly")
+    .action(async (text: string, options: { limit: string; includeHistorical?: boolean }) =>
       use(false, (store) => ({
         kind: "original-material-results",
-        results: store.search(text, Number(options.limit)),
+        results: store.search(text, Number(options.limit), options.includeHistorical),
       })),
+    );
+  knowledge
+    .command("network")
+    .description("Read source-backed entities, relationships and conversation context as JSON")
+    .option("--entity <id>", "Focus on one entity ID")
+    .option("--include-historical", "Include historical knowledge explicitly")
+    .option("--limit <number>", "Result limit, 1–50", "20")
+    .option("--offset <number>", "Pagination offset", "0")
+    .action(
+      async (options: {
+        entity?: string;
+        includeHistorical?: boolean;
+        limit: string;
+        offset: string;
+      }) =>
+        use(false, (store) =>
+          store.network({
+            entityId: options.entity,
+            includeHistorical: options.includeHistorical,
+            limit: Number(options.limit),
+            offset: Number(options.offset),
+          }),
+        ),
     );
   knowledge
     .command("read <id>")

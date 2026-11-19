@@ -34,6 +34,166 @@ it("validates an explicit knowledge connection and leaves the default disabled",
   ).toBe(false);
 });
 
+it("advertises network navigation and explicit historical retrieval to read connections", () => {
+  const [reader] = createKnowledgeTools({
+    getConfig: () => ({
+      tools: { knowledge: { directory: os.tmpdir(), connections: { reader: ["read"] } } },
+    }),
+    connectionId: "reader",
+    assertCurrent() {},
+  });
+  expect(reader!.parameters).toMatchObject({
+    properties: {
+      action: { enum: expect.arrayContaining(["network"]) },
+      entityId: { type: "string" },
+      includeHistorical: { type: "boolean" },
+      limit: { maximum: 50 },
+    },
+  });
+  expect(reader!.description).toMatch(/speaker.*addressee/i);
+});
+
+it("returns source-backed participants and relations while keeping historical knowledge opt-in", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-social-tool-"));
+  directories.push(directory);
+  const config: OpenClawConfig = {
+    tools: { knowledge: { directory, connections: { owner: ["read", "submit"] } } },
+  };
+  const tools = createKnowledgeTools({
+    getConfig: () => config,
+    connectionId: "owner",
+    assertCurrent() {},
+    registerCleanup: (close) => cleanups.push(close),
+  });
+  const writer = tools.find((tool) => tool.name === "knowledge_write")!;
+  const reader = tools.find((tool) => tool.name === "knowledge_read")!;
+  const organization = {
+    topics: ["合成协作"],
+    entities: [
+      { id: "synthetic:a", name: "合成人甲", kind: "person" },
+      { id: "synthetic:b", name: "合成人乙", kind: "person" },
+    ],
+    context: {
+      conversationId: "synthetic:conversation",
+      participantIds: ["synthetic:a", "synthetic:b"],
+      summary: "合成项目交流",
+    },
+    entries: [
+      {
+        summary: "甲计划复习",
+        subject: "合成人甲",
+        stance: "intent",
+        quote: "甲计划复习。",
+        timeText: null,
+        speakerIds: ["synthetic:a"],
+        addresseeIds: ["synthetic:b"],
+      },
+      {
+        summary: "乙称甲为同事",
+        subject: "合成人乙",
+        stance: "explicit",
+        quote: "乙称甲为同事。",
+        timeText: null,
+        speakerIds: ["synthetic:b"],
+        aboutIds: ["synthetic:a"],
+        relation: { fromId: "synthetic:b", toId: "synthetic:a", label: "同事", basis: "explicit" },
+      },
+    ],
+  };
+  const saved = await writer.execute("social-save", {
+    action: "submit",
+    title: "合成关系",
+    body: "甲计划复习。乙称甲为同事。",
+    organization,
+  });
+  const { id } = saved.details as { id: string };
+  expect(
+    (await reader.execute("social-context", { action: "context", terms: ["合成协作"] })).details,
+  ).toMatchObject({
+    results: [
+      {
+        organization: {
+          organization: {
+            entities: organization.entities,
+            context: organization.context,
+            entries: [
+              expect.anything(),
+              expect.objectContaining({
+                speakerIds: ["synthetic:b"],
+                relation: organization.entries[1]!.relation,
+              }),
+            ],
+          },
+        },
+      },
+    ],
+  });
+  expect(
+    (
+      await reader.execute("social-network", {
+        action: "network",
+        entityId: "synthetic:b",
+        limit: 50,
+      })
+    ).details,
+  ).toMatchObject({
+    entities: expect.arrayContaining([expect.objectContaining({ id: "synthetic:b" })]),
+    relations: [expect.objectContaining({ label: "同事", materialId: id, revision: 1 })],
+    conversations: [
+      expect.objectContaining({ conversationId: "synthetic:conversation", materialId: id }),
+    ],
+    truncated: false,
+  });
+  await writer.execute("social-history", {
+    action: "submit",
+    title: "合成往事",
+    body: "甲计划复习。乙称甲为同事。",
+    organization: { ...organization, relevance: "historical" },
+  });
+  expect((await reader.execute("current-list", { action: "list" })).details).toMatchObject({
+    results: [{ id }],
+  });
+  const historical = await reader.execute("history-search", {
+    action: "search",
+    terms: ["合成协作"],
+    includeHistorical: true,
+  });
+  expect((historical.details as { results: unknown[] }).results).toHaveLength(2);
+  expect(
+    (
+      (await reader.execute("history-list", { action: "list", includeHistorical: true }))
+        .details as { results: unknown[] }
+    ).results,
+  ).toHaveLength(2);
+  await writer.execute("large-network", {
+    action: "submit",
+    title: "合成网络预算",
+    body: "甲计划复习。乙称甲为同事。",
+    organization: {
+      ...organization,
+      entities: [
+        ...organization.entities,
+        ...Array.from({ length: 22 }, (__, entityIndex) => ({
+          id: `synthetic:large:${entityIndex}`,
+          name: `合成人物${entityIndex}`,
+          kind: "person",
+          aliases: Array.from(
+            { length: 12 },
+            (___, aliasIndex) => `${aliasIndex}${"合".repeat(150)}`,
+          ),
+        })),
+      ],
+    },
+  });
+  const bounded = await reader.execute("bounded-network", { action: "network", limit: 50 });
+  expect(bounded.details).toMatchObject({ truncated: true });
+  expect(JSON.stringify(bounded.details, null, 2).length).toBeLessThanOrEqual(12000);
+  config.tools!.knowledge!.connections.owner = [];
+  await expect(reader.execute("network-revoked", { action: "network" })).rejects.toThrow(
+    /permission|authorized/i,
+  );
+});
+
 it("uses the same entry to save, retrieve current evidence, correct and delete across connections", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-tools-"));
   directories.push(directory);

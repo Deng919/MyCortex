@@ -19,12 +19,18 @@ let returnFocus = null;
 let directory = "";
 let editingMaterial = null;
 let deletingMaterial = null;
+// Shared classic-script bindings updated by network-view.js.
+// eslint-disable-next-line prefer-const
+let view = "knowledge";
+// eslint-disable-next-line prefer-const
+let selectedEntity = null;
 const stanceNames = {
   explicit: "明确表述",
   intent: "计划 / 意向",
   uncertain: "尚不确定",
   "other-view": "他人观点",
 };
+const basisNames = { remark: "联系人备注", explicit: "明确关系", inferred: "语境推断" };
 
 async function api(route, data) {
   const response = await fetch(`/api/${route}`, {
@@ -62,6 +68,23 @@ function message(text, error = false) {
   $("message").classList.toggle("error", error);
   $("message").hidden = !text;
 }
+function entityLabel(entity) {
+  if (!entity) {
+    return "未知对象";
+  }
+  const remark = entity.identity?.remark || entity.remark;
+  const nickname = entity.identity?.nickname || entity.nickname;
+  const label = remark || entity.name;
+  return nickname && nickname !== label ? `${label}（昵称：${nickname}）` : label;
+}
+function names(ids, entities) {
+  return (ids || [])
+    .map((id) => entityLabel(entities.find((entity) => entity.id === id)))
+    .join("、");
+}
+function historicalQuery() {
+  return `includeHistorical=${$("include-historical").checked}`;
+}
 function renderList() {
   $("list").replaceChildren();
   if (!items.length) {
@@ -93,12 +116,18 @@ function renderList() {
   }
 }
 async function loadList() {
+  if (view === "network") {
+    await loadNetwork();
+    return;
+  }
   const sequence = ++listRequest;
   const query = $("search").value.trim();
   $("list-caption").textContent = query ? "正在搜索…" : "最近保存";
   $("refresh").disabled = true;
   try {
-    const result = await api(`materials?offset=${page * 20}&q=${encodeURIComponent(query)}`);
+    const result = await api(
+      `materials?offset=${page * 20}&q=${encodeURIComponent(query)}&${historicalQuery()}`,
+    );
     if (sequence !== listRequest) {
       return;
     }
@@ -131,6 +160,7 @@ function tab(name) {
   }
 }
 function renderDetail(historical) {
+  $("network-detail").hidden = true;
   $("empty").hidden = true;
   $("detail").hidden = false;
   $("kind").textContent = current.kind === "text" ? "知识" : "来源链接";
@@ -153,18 +183,44 @@ function renderDetail(historical) {
   const panel = $("knowledge-content");
   panel.replaceChildren();
   const organization = current.organization;
+  const content = organization?.organization;
+  const entities = content?.entities || [];
+  if (content?.relevance === "historical") {
+    panel.append(node("p", "historical-note", "历史资料 · 反映当时的交流与关系"));
+  }
+  if (content?.context) {
+    const context = node("aside", "conversation-context");
+    context.append(
+      node("h3", "", names(content.context.participantIds, entities)),
+      node("p", "", content.context.summary),
+    );
+    if (content.context.relatedIds?.length) {
+      context.append(node("p", "muted", `关联：${names(content.context.relatedIds, entities)}`));
+    }
+    panel.append(context);
+  }
   if (organization?.status === "organized" && organization.organization) {
-    const content = organization.organization;
     if (content.topics.length) {
       panel.append(node("p", "muted", content.topics.join(" · ")));
     }
     for (const entry of content.entries) {
       const card = node("article", "interpretation");
+      const speaker = names(entry.speakerIds, entities);
+      const addressee = names(entry.addresseeIds, entities);
+      const attribution = [speaker || entry.subject, addressee].filter(Boolean).join(" → ");
       card.append(
         node("span", "pill", stanceNames[entry.stance]),
         node("h3", "", entry.summary),
-        node("p", "muted", `${entry.subject}${entry.timeText ? " · " + entry.timeText : ""}`),
+        node("p", "muted", `${attribution}${entry.timeText ? " · " + entry.timeText : ""}`),
       );
+      if (entry.aboutIds?.length) {
+        card.append(node("p", "muted", `谈及：${names(entry.aboutIds, entities)}`));
+      }
+      if (entry.relation) {
+        card.append(
+          node("p", "muted", `${entry.relation.label} · ${basisNames[entry.relation.basis]}`),
+        );
+      }
       const evidence = node("details", "evidence");
       evidence.append(node("summary", "", "查看依据"), node("blockquote", "", entry.quote));
       card.append(evidence);
@@ -226,11 +282,11 @@ async function showHistory() {
         node("p", "", date(entry.recordedAt, true)),
         node("p", "", historyNote(entry.note)),
       );
-      const view = node("button", "secondary", "查看版本");
-      view.addEventListener("click", () => {
+      const versionButton = node("button", "secondary", "查看版本");
+      versionButton.addEventListener("click", () => {
         void openMaterial(id, entry.revision);
       });
-      row.append(copy, view);
+      row.append(copy, versionButton);
       $("history-panel").append(row);
     }
   } catch (error) {
@@ -240,9 +296,13 @@ async function showHistory() {
   }
 }
 function historyNote(note) {
-  if (!note) return "首次保存";
+  if (!note) {
+    return "首次保存";
+  }
   try {
-    if (JSON.parse(note).kind === "knowledge-refinement") return "知识提炼入库";
+    if (JSON.parse(note).kind === "knowledge-refinement") {
+      return "知识提炼入库";
+    }
   } catch {
     // A user correction note is ordinary text.
   }
@@ -270,7 +330,7 @@ function openEditor(mode) {
   $("edit-form").reset();
   $("form-error").hidden = true;
   $("new-fields").hidden = mode !== "new";
-  $("input-title").required = mode === "new";
+  $("input-title").value = mode === "edit" ? current.title : "";
   $("note-field").hidden = mode === "new";
   $("editor-title").textContent = mode === "new" ? "手写知识" : "编辑知识";
   $("edit-description").textContent =
@@ -320,10 +380,14 @@ async function saveMaterial() {
           })
         : await api(`materials/${editingMaterial.id}/correct`, {
             expectedRevision: editingMaterial.revision,
+            title: $("input-title").value.trim(),
             body: $("input-body").value,
             note: $("input-note").value.trim() || "用户在客户端修改正文",
           });
     $("editor").close();
+    if (view !== "knowledge") {
+      setView("knowledge");
+    }
     $("search").value = "";
     page = 0;
     message(editorMode === "new" ? "知识已保存。" : "修改已保存，旧版本可在历史中查看。");
@@ -424,10 +488,24 @@ $("back").addEventListener("click", () =>
 async function refresh() {
   message("");
   await loadList();
-  if (currentId) {
+  if (view === "network" && selectedEntity) {
+    await openEntity(selectedEntity);
+  } else if (view === "knowledge" && currentId) {
     await openMaterial(currentId);
   }
 }
+$("view-knowledge").addEventListener("click", () => {
+  setView("knowledge");
+  void loadList();
+});
+$("view-network").addEventListener("click", () => {
+  setView("network");
+  void loadList();
+});
+$("include-historical").addEventListener("change", () => {
+  setView(view);
+  void loadList();
+});
 $("refresh").addEventListener("click", () => {
   void refresh();
 });

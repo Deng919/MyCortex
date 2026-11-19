@@ -9,7 +9,11 @@ import {
   type MaterialRow,
   type RevisionRow,
 } from "./contract.js";
-import { organizationResultSchema, validateOrganization } from "./organization-contract.js";
+import {
+  organizationResultSchema,
+  organizationSchema,
+  validateOrganization,
+} from "./organization-contract.js";
 import { queueImportedOrganizations } from "./store-schema.js";
 
 export type KnowledgeRecoveryContext = {
@@ -114,7 +118,9 @@ export function importKnowledgeBundle(context: KnowledgeRecoveryContext, raw: un
     }
     organizationIds.add(row.materialId);
     if (row.status === "pending") {
-      if (row.organization !== null || row.processor !== null || row.manual !== 0) {
+      const metadata =
+        row.organization === null ? null : organizationSchema.parse(JSON.parse(row.organization));
+      if (metadata?.entries.length || row.processor !== null || row.manual !== 0) {
         throw new Error("Invalid imported pending organization");
       }
     } else {
