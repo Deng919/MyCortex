@@ -74,8 +74,7 @@ function entityLabel(entity) {
   }
   const remark = entity.identity?.remark || entity.remark;
   const nickname = entity.identity?.nickname || entity.nickname;
-  const label = remark || entity.name;
-  return nickname && nickname !== label ? `${label}（昵称：${nickname}）` : label;
+  return remark || entity.name || nickname || "未知对象";
 }
 function names(ids, entities) {
   return (ids || [])
