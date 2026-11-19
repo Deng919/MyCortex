@@ -77,11 +77,16 @@ export function registerKnowledgeCli(program: Command): void {
   metadata(
     knowledge
       .command("add")
-      .description("Save UTF-8 text or Markdown as original material")
+      .description("Save refined knowledge backed by a transient UTF-8 source")
+      .requiredOption(
+        "--refinement <path>",
+        "Agent-produced topics/entries JSON with verbatim source evidence",
+      )
       .requiredOption("--file <path>", "Explicit UTF-8 input file, at most 256 KiB"),
   ).action(
     async (options: {
       file: string;
+      refinement: string;
       title: string;
       source: string;
       author: string;
@@ -90,17 +95,24 @@ export function registerKnowledgeCli(program: Command): void {
       submittedBy: string;
     }) => {
       const body = await readUtf8(options.file, MAX_BODY_BYTES);
+      const { organizationSchema } = await import("../knowledge/organization-contract.js");
+      const organization = organizationSchema.parse(
+        JSON.parse(await readUtf8(options.refinement, MAX_BODY_BYTES)),
+      );
       return use(false, (store) =>
-        store.submit({
-          requestKey: options.request,
-          title: options.title,
-          body,
-          sourceUri: options.source,
-          author: options.author,
-          submittedBy: options.submittedBy,
-          observedAt: options.observedAt ?? null,
-          kind: "text",
-        }),
+        store.submitKnowledge(
+          {
+            requestKey: options.request,
+            title: options.title,
+            body,
+            sourceUri: options.source,
+            author: options.author,
+            submittedBy: options.submittedBy,
+            observedAt: options.observedAt ?? null,
+            kind: "text",
+          },
+          organization,
+        ),
       );
     },
   );
@@ -126,7 +138,7 @@ export function registerKnowledgeCli(program: Command): void {
       submittedBy: string;
     }) =>
       use(false, (store) =>
-        store.submit({
+        store.submitKnowledge({
           requestKey: options.request,
           title: options.title,
           body: "",

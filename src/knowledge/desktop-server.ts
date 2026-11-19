@@ -5,6 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 import { createKnowledgeClient, KnowledgeWriteOutcomeUnknownError } from "./client.js";
 import { correctionSchema, submissionSchema } from "./contract.js";
+import type { KnowledgeOrganization } from "./organization-contract.js";
 
 const revision = z.coerce.number().int().positive();
 const correction = correctionSchema
@@ -123,13 +124,37 @@ export async function startKnowledgeDesktop(options: { directory: string; port?:
         }
         if (request.method === "POST") {
           const raw = z.record(z.string(), z.unknown()).parse(await readJson(request));
-          const input = submissionSchema.parse({ ...raw, submittedBy: "local-desktop" });
-          json(
-            await client.execute(
-              { operation: "submit", input: { ...input, submittedBy: "local-desktop" } },
-              authority,
-            ),
+          const { entryMode, ...source } = raw;
+          const input = submissionSchema.parse({ ...source, submittedBy: "local-desktop" });
+          let organization: KnowledgeOrganization | undefined;
+          if (input.kind === "text") {
+            if (entryMode !== "manual-knowledge") {
+              throw new HttpError(
+                422,
+                "原始材料请先交给已连接的 Agent 提炼后提交；客户端只直接保存用户手写知识。原文未保存。",
+              );
+            }
+            if (input.body.length > 2000) {
+              throw new HttpError(400, "每条手写知识最多 2,000 字，请提炼后分条记录。");
+            }
+            organization = {
+              topics: [],
+              entries: [
+                {
+                  summary: input.title,
+                  subject: "用户手写知识",
+                  stance: "explicit",
+                  quote: input.body,
+                  timeText: null,
+                },
+              ],
+            };
+          }
+          const saved = await client.execute(
+            { operation: "submit", input, organization },
+            authority,
           );
+          json(saved ?? { status: "skipped", reason: "no-useful-knowledge" });
           return;
         }
       }

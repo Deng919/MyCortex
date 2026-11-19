@@ -61,7 +61,21 @@ it("uses the same entry to save, retrieve current evidence, correct and delete a
     title: "合成周末计划",
     body: "我打算周六复习卷积，尚未确定是否参加活动。",
     author: "synthetic-user",
+    organization: {
+      topics: ["周末计划"],
+      entries: [
+        {
+          summary: "周末复习计划，参加活动未定",
+          subject: "synthetic-user",
+          stance: "intent",
+          quote: "我打算周六复习卷积，尚未确定是否参加活动。",
+          timeText: "周六",
+        },
+      ],
+    },
   };
+  const { organization: _organization, ...rawOnly } = submission;
+  await expect(writer.execute("unrefined", rawOnly)).rejects.toThrow(/refin/i);
   const saved = await writer.execute("save-1", submission);
   expect(saved.details).toMatchObject({ status: "saved", revision: 1 });
   const { id } = saved.details as { id: string };

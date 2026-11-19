@@ -1,0 +1,2 @@
+297
+# Add regression coverage for source-backed refinement, raw-input rejection, QQ import protection, and the handwritten knowledge desktop/MCP boundaries.

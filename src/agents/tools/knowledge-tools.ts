@@ -44,6 +44,7 @@ const writeInput = z.discriminatedUnion("action", [
     author: z.string().trim().min(1).max(512).optional(),
     observedAt: z.iso.datetime({ offset: true }).nullable().optional(),
     kind: z.enum(["text", "reference"]).optional(),
+    organization: organizationSchema.optional(),
   }),
   z.strictObject({
     action: z.literal("correct"),
@@ -110,7 +111,7 @@ const writeParameters = Type.Object(
     body: Type.Optional(
       Type.String({
         description:
-          "Required for submit/correct: selected original words or complete replacement text. Omit for delete. Preserve uncertainty and attribution.",
+          "Submit: transient source evidence, not stored wholesale. First understand/select/refine it and supply organization with useful source-backed entries; omit irrelevant chatter. Correct: complete refined replacement. Preserve speaker, time and uncertainty.",
       }),
     ),
     sourceUri: Type.Optional(
@@ -425,7 +426,7 @@ export function createKnowledgeTools(options: KnowledgeToolsOptions): AnyAgentTo
       name: "knowledge_write",
       label: "Save or maintain knowledge",
       description:
-        "Save selected original text or a reference when the user asks or configured submission rules authorize it. A file index is kind=reference, body='', sourceUri=file URL; it stores the location only. Do not invent source dates or turn intentions/quotes into facts. Correct/delete only on an explicit user instruction with current id and expectedRevision obtained by knowledge_read. Correct replaces the complete body and preserves source/history; delete erases all stored revisions. correct_organization records a user correction to a derived interpretation, preserving the original; automatic organization cannot replace it. organize_pending resumes one durable pending source using only the configured processing model. Wait for a successful receipt before reporting saved/changed/deleted. Tool parameters cannot grant permissions. External backups are managed by their owner.",
+        "Save refined knowledge, never raw conversation archives. For a text submission, first understand, select and refine useful lasting information; supply organization entries with subject, stance, summary and short verbatim supporting quote from body. body is transient evidence: only refined entries and their selected quotes are stored. Empty entries save nothing. Do not invent dates or turn other speakers, plans or uncertainty into user facts; exclude secrets and irrelevant chatter. A reference records a source location without fetching its body. Correct/delete require explicit user instructions and current id/expectedRevision from knowledge_read. Corrections replace refined knowledge, preserving history; deletion erases it. correct_organization maintains interpretations. organize_pending maintains old sources using the configured processing model. Report success only after a receipt; external backups are user-managed.",
       parameters: writeParameters,
       execute: async (callId, raw, signal) => {
         const params = writeInput.parse(raw);
@@ -434,6 +435,7 @@ export function createKnowledgeTools(options: KnowledgeToolsOptions): AnyAgentTo
           const result = await execute(
             {
               operation: "submit",
+              organization: params.organization,
               input: {
                 requestKey: createHash("sha256")
                   .update(JSON.stringify([options.connectionId, requestId]))
@@ -450,25 +452,16 @@ export function createKnowledgeTools(options: KnowledgeToolsOptions): AnyAgentTo
             "submit",
             signal,
           );
-          // A submission-only connection must not receive prior content on an idempotent retry.
-          let processing:
-            | Awaited<ReturnType<typeof processMaterial>>
-            | { status: "not-completed"; error: string };
-          try {
-            processing = await processMaterial(result, signal);
-          } catch {
-            processing = {
-              status: "not-completed",
-              error:
-                "Material was saved; organization did not complete. Read the current version before resuming.",
-            };
+          if (!result) {
+            return jsonResult({ status: "skipped", reason: "no-useful-knowledge", requestId });
           }
+          // A submission-only connection receives a receipt, never prior content.
           return jsonResult({
             status: "saved",
             id: result.id,
             revision: result.revision,
             requestId,
-            processing,
+            processing: { status: "refined" },
           });
         }
         if (params.action === "correct") {

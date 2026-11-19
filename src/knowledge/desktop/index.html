@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MyCortex · 记忆</title>
+    <title>MyCortex · 知识</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js" defer></script>
@@ -22,7 +22,7 @@
           />
         </svg>
         <span class="brand-name">MyCortex</span>
-        <span class="brand-caption">记忆库</span>
+        <span class="brand-caption">知识库</span>
       </div>
       <label class="search-box">
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -32,26 +32,26 @@
         <input
           id="search"
           type="search"
-          placeholder="搜索记忆"
-          aria-label="搜索记忆"
+          placeholder="搜索知识"
+          aria-label="搜索知识"
           maxlength="605"
         />
         <kbd>/</kbd>
       </label>
       <div class="header-tools">
-        <span id="connection" class="connection" role="status">正在连接记忆库…</span>
+        <span id="connection" class="connection" role="status">正在连接知识库…</span>
         <button id="store-info" class="secondary" title="查看存储位置">存储位置</button>
       </div>
     </header>
     <div class="workspace">
-      <aside class="sidebar" aria-label="记忆列表">
+      <aside class="sidebar" aria-label="知识列表">
         <button id="new" class="primary new-button">
-          <span aria-hidden="true">＋</span> 新增记忆
+          <span aria-hidden="true">＋</span> 手写知识
         </button>
-        <div class="collection-head"><h1>我的记忆</h1></div>
+        <div class="collection-head"><h1>我的知识</h1></div>
         <div class="list-heading">
           <span id="list-caption">最近保存</span
-          ><button id="refresh" class="text-button" title="刷新记忆列表">刷新</button>
+          ><button id="refresh" class="text-button" title="刷新知识列表">刷新</button>
         </div>
         <p id="search-hint" class="search-hint" hidden>
           多个关键词用空格隔开，显示最近 10 条匹配。
@@ -61,12 +61,12 @@
           <button id="previous" class="text-button">← 上一页</button><span id="page-number"></span
           ><button id="next" class="text-button">下一页 →</button>
         </div>
-        <footer class="sidebar-footer">本机记忆库</footer>
+        <footer class="sidebar-footer">本机知识库</footer>
       </aside>
       <main id="main">
         <header class="main-top">
-          <button id="back" class="text-button">← 记忆列表</button
-          ><span class="view-label">记忆详情</span>
+          <button id="back" class="text-button">← 知识列表</button
+          ><span class="view-label">知识详情</span>
         </header>
         <div id="message" role="status" hidden></div>
         <section id="empty" class="empty-state">
@@ -89,9 +89,12 @@
               stroke-linecap="round"
             />
           </svg>
-          <h2>查看你的记忆</h2>
-          <p>选择左侧的一条记忆，查看原文和来源。<br />也可以记下新的内容。</p>
-          <button id="empty-new" class="primary">＋ 新增记忆</button>
+          <h2>积累理解后的知识</h2>
+          <p>
+            选择左侧知识，查看内容和来源依据。<br />聊天、文件等原始材料，请通过已连接的 Agent
+            提炼后提交。
+          </p>
+          <button id="empty-new" class="primary">＋ 手写知识</button>
         </section>
         <section id="detail" hidden>
           <div class="detail-header">
@@ -103,23 +106,21 @@
               ><button id="delete" class="danger-text">删除</button>
             </div>
           </div>
-          <nav class="tabs" aria-label="记忆内容">
-            <button id="tab-original" aria-current="page">原文</button
-            ><button id="tab-organization">整理结果</button
+          <nav class="tabs" aria-label="知识内容">
+            <button id="tab-knowledge" aria-current="page">知识与依据</button
             ><button id="tab-history">历史版本</button>
           </nav>
-          <div id="original-panel" class="detail-content">
+          <div id="knowledge-panel" class="detail-content">
             <div id="historical-banner" hidden>
               正在查看历史版本
               <button id="return-current" class="text-button">返回当前版本 →</button>
             </div>
-            <div id="body" class="body-text"></div>
-            <section class="source-section" aria-labelledby="source-heading">
-              <h3 id="source-heading">来源与记录信息</h3>
+            <div id="knowledge-content"></div>
+            <details class="source-section">
+              <summary>来源与记录信息</summary>
               <dl id="metadata" class="metadata"></dl>
-            </section>
+            </details>
           </div>
-          <div id="organization-panel" class="detail-content" hidden></div>
           <div id="history-panel" class="detail-content" hidden></div>
         </section>
       </main>
@@ -128,7 +129,7 @@
       <form id="edit-form">
         <div class="dialog-heading">
           <div>
-            <h2 id="editor-title">新增记忆</h2>
+            <h2 id="editor-title">手写知识</h2>
           </div>
           <button type="button" id="close-editor" class="icon-button" aria-label="关闭编辑">
             ×
@@ -137,16 +138,20 @@
         <p id="edit-description" class="muted"></p>
         <div id="new-fields">
           <label
-            >标题<input id="input-title" maxlength="300" placeholder="例如：周末读书计划" required
+            >知识摘要<input
+              id="input-title"
+              maxlength="300"
+              placeholder="用一句话概括已提炼的知识"
+              required
           /></label>
           <div class="field-row">
             <label
               >类型<select id="input-kind">
-                <option value="text">文字记忆</option>
+                <option value="text">用户手写知识</option>
                 <option value="reference">来源链接</option>
               </select></label
             ><label
-              >原作者<input id="input-author" maxlength="512" placeholder="未知可留空"
+              >记录人<input id="input-author" maxlength="512" placeholder="未知可留空"
             /></label>
           </div>
           <label
@@ -157,10 +162,10 @@
           /></label>
         </div>
         <label id="body-field"
-          >正文<textarea
+          >知识内容<textarea
             id="input-body"
             rows="9"
-            placeholder="记录想法、经历，或粘贴想保留的原话…"
+            placeholder="写下你已理解、筛选和提炼的知识。原始聊天或材料请通过 Agent 提炼后提交。"
             required
           ></textarea></label
         ><label id="note-field" hidden
@@ -171,7 +176,7 @@
           <span id="body-count" class="muted"></span>
           <div>
             <button type="button" id="cancel-editor" class="secondary">取消</button
-            ><button id="save" type="submit" class="primary">保存记忆</button>
+            ><button id="save" type="submit" class="primary">保存知识</button>
           </div>
         </div>
       </form>
@@ -182,7 +187,7 @@
       aria-describedby="delete-description"
     >
       <form id="delete-form">
-        <h2 id="delete-heading">删除这条记忆？</h2>
+        <h2 id="delete-heading">删除这条知识？</h2>
         <p id="delete-title"></p>
         <p id="delete-description" class="muted">
           正文、整理结果和全部历史版本都会从本库清除，无法撤销。原始文件不受影响。
@@ -190,12 +195,12 @@
         <p id="delete-error" class="form-error" role="alert" hidden></p>
         <div class="dialog-footer">
           <button type="button" id="cancel-delete" class="secondary">取消</button
-          ><button id="confirm-delete" type="submit" class="danger">删除记忆</button>
+          ><button id="confirm-delete" type="submit" class="danger">删除知识</button>
         </div>
       </form>
     </dialog>
     <dialog id="store-dialog" aria-labelledby="store-heading">
-      <h2 id="store-heading">记忆存储位置</h2>
+      <h2 id="store-heading">知识存储位置</h2>
       <p class="muted">客户端与指向同一目录的 MCP 连接共享数据。</p>
       <p id="store-path" class="path"></p>
       <form method="dialog"><button class="primary">知道了</button></form>

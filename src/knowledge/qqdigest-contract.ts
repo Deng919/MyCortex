@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_BODY_BYTES } from "./contract.js";
+import { organizationSchema } from "./organization-contract.js";
 
 const label = z.string().trim().min(1).max(512);
 const body = z
@@ -25,6 +26,7 @@ const candidateSchema = z.strictObject({
   groupName: label,
   messageIds: z.array(label).max(40),
   body,
+  organization: organizationSchema.optional(),
   sourceUri: z.string().trim().min(1).max(2048),
   author: label,
   observedAt: timestamp,

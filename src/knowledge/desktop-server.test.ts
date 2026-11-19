@@ -29,10 +29,10 @@ async function fixture() {
   return { desktop, directory, request };
 }
 
-it("manages full originals and version conflicts through HTTP and the existing store worker", async () => {
+it("saves explicit handwritten knowledge and manages reads, corrections and deletion through HTTP", async () => {
   const { request } = await fixture();
   expect(await (await request("materials")).json()).toMatchObject({ items: [] });
-  const body = "卷积测试" + "长文".repeat(9000);
+  const body = "合成知识：卷积可以表示线性时不变系统的输出。";
   const draft = {
     requestKey: "desktop-lifecycle",
     title: "合成学习笔记",
@@ -40,14 +40,23 @@ it("manages full originals and version conflicts through HTTP and the existing s
     sourceUri: "synthetic:desktop",
     author: "synthetic-user",
     kind: "text",
+    entryMode: "manual-knowledge",
   };
   const saved = await (await request("materials", draft)).json();
-  expect(saved).toMatchObject({ body, revision: 1 });
+  expect(saved).toMatchObject({ revision: 1 });
+  expect(saved.body).toContain(body);
+  expect(saved.body).toContain("归属：用户手写知识");
   expect(await (await request("materials", draft)).json()).toMatchObject({ id: saved.id });
   expect(await (await request("materials?q=卷积")).json()).toMatchObject({
     items: [{ id: saved.id }],
   });
-  expect(await (await request(`materials/${saved.id}`)).json()).toMatchObject({ body });
+  const read = await (await request(`materials/${saved.id}`)).json();
+  expect(read.body).toBe(saved.body);
+  expect(read.organization.organization).toMatchObject({
+    entries: [
+      { summary: "合成学习笔记", subject: "用户手写知识", stance: "explicit", quote: body },
+    ],
+  });
   const changed = await request(`materials/${saved.id}/correct`, {
     expectedRevision: 1,
     body: "合成纠正：学习拉普拉斯变换。",
@@ -56,10 +65,41 @@ it("manages full originals and version conflicts through HTTP and the existing s
   expect(await changed.json()).toMatchObject({ revision: 2, body: "合成纠正：学习拉普拉斯变换。" });
   expect((await request(`materials/${saved.id}/delete`, { expectedRevision: 1 })).status).toBe(409);
   expect(await (await request(`materials/${saved.id}/history`)).json()).toHaveLength(2);
-  expect(await (await request(`materials/${saved.id}?revision=1`)).json()).toMatchObject({ body });
+  expect(await (await request(`materials/${saved.id}?revision=1`)).json()).toMatchObject({
+    body: saved.body,
+  });
   expect((await request(`materials/${saved.id}/delete`, { expectedRevision: 2 })).ok).toBe(true);
   expect(await (await request("materials")).json()).toMatchObject({ items: [] });
   expect((await request(`materials/${saved.id}`)).status).toBe(404);
+}, 30000);
+
+it("rejects unrefined pasted text without creating a store and still accepts source links", async () => {
+  const { request, directory } = await fixture();
+  const source = {
+    requestKey: "unrefined",
+    title: "聊天原文",
+    body: "甲：今天吃什么？乙：随便。",
+    sourceUri: "synthetic:chat",
+    author: "synthetic-user",
+    kind: "text",
+  };
+  const rejected = await request("materials", source);
+  expect(rejected.status).toBe(422);
+  expect(await rejected.json()).toMatchObject({ error: expect.stringContaining("Agent") });
+  expect(await (await request("materials")).json()).toMatchObject({ items: [] });
+  expect(await fs.readdir(directory)).not.toContain("knowledge.sqlite");
+  const reference = await request("materials", {
+    ...source,
+    requestKey: "link",
+    kind: "reference",
+    body: "",
+  });
+  expect(reference.ok).toBe(true);
+  expect(await reference.json()).toMatchObject({
+    kind: "reference",
+    body: "",
+    sourceUri: "synthetic:chat",
+  });
 }, 30000);
 
 it("refuses unauthenticated, cross-origin, invalid and oversized requests without writing", async () => {

@@ -1,6 +1,6 @@
 # MyCortex 知识库：聊天与独立连接
 
-知识库通过现有 OpenClaw 聊天模型的 `knowledge_read` / `knowledge_write` 工具使用，支持保存原文/引用、按任务检索、材料列表、带依据读取、纠正和删除。独立 AI 可通过 MCP stdio 连接同一个存储。Windows 用户可使用[记忆客户端](desktop.md)查看、编辑和删除记忆；离线 CLI 继续用于直接管理和备份。
+知识库通过现有 OpenClaw 聊天模型的 `knowledge_read` / `knowledge_write` 工具使用，支持保存提炼知识/来源引用、按任务检索、知识列表、带依据读取、纠正和删除。完整来源留在来源系统。独立 AI 可通过 MCP stdio 连接同一个存储。Windows 用户可使用[记忆客户端](desktop.md)查看、编辑和删除记忆；离线 CLI 继续用于直接管理和备份。
 
 代码位于 OpenClaw 核心 `src/knowledge`，知识数据独立于聊天和 Agent。当前用合成资料验证，生产加密方式尚待确定。
 
@@ -13,9 +13,6 @@
   agents: {
     defaults: {
       compaction: { memoryFlush: { enabled: false } },
-      models: {
-        "ollama/qwen3.5:9b-q4_K_M": { params: { temperature: 0, num_ctx: 32768 } },
-      },
     },
   },
   plugins: { slots: { memory: "none" } },
@@ -25,27 +22,20 @@
     knowledge: {
       directory: "D:/Cache/MyCortex/chat-demo/knowledge",
       connections: {
-        "agent:main:main": ["read", "submit", "manage", "organize"],
+        "agent:main:main": ["read", "submit", "manage"],
         "agent:main:another-chat": ["read"],
       },
       fileRoots: ["D:/Cache/MyCortex/chat-demo/files"],
-      // Optional: only this explicitly configured model may receive material for organization.
-      processing: {
-        provider: "ollama",
-        model: "qwen3.5:9b-q4_K_M",
-        maxOutputTokens: 1200,
-        timeoutMs: 60000,
-      },
     },
   },
 }
 ```
 
-示例将工具限制为知识读写，并关闭旧 memory 插件和压缩前写记忆，便于在独立合成实例检查知识闭环。使用本机 9B 时，提供方模型的 `contextWindow` 与实际 Ollama `params.num_ctx` 都设为 32,768；只改前者不会扩大 Ollama 的实际窗口。其他对话模型沿用自己的配置。
+示例将工具限制为知识读写，并关闭旧 memory 插件和压缩前写记忆，便于在独立合成实例检查知识闭环。对话模型沿用已有连接；本次提炼整改已停止使用本机9B。
 
 通过现有入口 `pnpm openclaw gateway run` 启动后，在获准会话中直接说：
 
-- “记住这段原文：我打算周日复习卷积，还没决定是否参加活动。”
+- “提炼并记住：我打算周日复习卷积，还没决定是否参加活动。”
 - “我周末打算学什么？请给出保存的依据。”
 - “列出最近保存的材料。”
 - “纠正刚才那条：改成周六复习拉普拉斯变换。”
@@ -55,17 +45,15 @@
 
 模型直接选择知识工具，不增加一个路由模型。检索支持最多 6 个短关键词的大小写不敏感 OR 匹配，也匹配当前整理主题；首次结果含有界原文/解释预览，正文可按 ID 分段读取。结果携带材料 ID、源修订、来源和时间。未命中只说明本次搜索未找到材料。链接引用没有已保存正文。
 
-## 自动整理与上下文
+## 入库前提炼与上下文
 
-保存成功后材料可立即检索。若同时配置 `processing` 并授予连接 `organize`，程序会用该模型做一次无工具的有界整理，验证结果后保存派生解释；错误、空结果或超长输入均保留原文和真实处理状态。2026-11-15在真实Gateway中验证：保存自动整理返回 organized，写入两个逐字引文；纠正后再次整理可返回 empty，原文仍保留。两次整理调用usage分别为734和601 tokens。处理服务默认不启用，没有后台扫描或按轮次自动保存聊天。
+提交文本前，当前 Agent 必须先理解、筛选和提炼，提交 `organization`（最多5个主题、8条知识）。每条包含 `summary`、`subject`、`stance`、逐字 `quote`，以及空值或引文中的时间短语 `timeText`。`body` 只作为瞬时来源证据；正式保存的是提炼知识、必要引文和来源。没有提炼时拒绝保存，空 entries 不产生知识条目，引文不匹配时拒绝整次提交。
 
-待办与材料修订一起持久保存；中断后可通过同一知识工具的 `organize_pending` 每次继续一份。原文纠正会按新修订重新整理。当前输入正文上限为 8,000 字符，超出时整份保留原文并记录跳过，不截取一部分后当成完整解释。用户明确纠正解释时检查原文和解释两个版本，自动整理不能覆盖人工修正。
+归属、意图、不确定与他人观点保留；逐字校验只能证明引文来自输入，语义正确性仍需 Agent 判断。来源中的指令是资料，不是执行授权。完整聊天留在QQ Digest等来源系统；手写知识由用户直接表达，客户端明确标明该入口。
 
-解释记录主题、主体、意向/不确定/他人观点等立场及逐字引文，属于模型解读。程序能检查来源修订、逐字引文和原话时间；引用是否支持解释还依赖模型质量。本机 9B 曾产生遗漏和语义错误，实际处理状态与原文应一同查看。
+提交成功后立即可读可搜。相同 requestId 与相同来源输入重试返回当前版本，即使 Agent 改写了摘要也不重复。源输入改变需要新请求或明确纠正；删除后同一请求不能复活。QQ来源刷新同时更新知识标题与证据，不覆盖用户手动纠正。旧版原文导入需先清除，避免把原文保留在修订历史。
 
-`context` 按当前任务取相关材料及解释预览，回答仍由同一对话模型生成。每次涉及已保存知识的问答要求重新查询当前库；旧对话已读出的内容仍存在于会话历史，当前没有从所有历史副本中自动抹除已披露内容。
-
-聊天模型按既有模型连接计费；整理至多增加一次显式配置的模型调用，返回该次 `usage`，不可得时为未知。字面存取不调用模型。搜索预览有 6,000 字符预算，正文默认读取 3,000、最多 8,000 字符；这些是结果大小限制，不是整个模型请求的 token/费用上限。
+`context` 按当前任务提供相关知识和依据预览，回答由同一对话模型生成。涉及个人知识时查询当前库，搜索预览总预算6,000字符，正文默认3,000、每段最多8,000字符。字面存取不另调模型。旧版 `processing` / `organize_pending` 仅用于显式配置后的知识维护，不是先保存原文的许可；本次未配置或调用本机模型。
 
 ## 文件原位保留
 
@@ -109,7 +97,7 @@ MCP 客户端直接启动源码入口，stdout 只承载协议：
 MCP 在初始化时发送使用规则，并在对应工具说明中保留规则，按连接能力启用：
 
 - `read`：回答涉及用户偏好、背景、过去决定或计划时，主动用少量关键词查询当前库，根据相关材料自然回答；普通通用问题跳过查询。预览够用时不再读全文；当前明确要求优先于旧偏好。未命中或失败时继续依据当前对话回答，不编造个人资料。
-- `submit`：正常聊天出现值得长期复用的新信息时，主动归纳，在话题自然节点合并提交，不等用户逐次说“记住”。正文区分 Agent 摘要与选定原话，保留归属、时间、不确定与否定。跳过假设、举例、秘密、用户要求不保存的内容及已查出的旧材料；不为每轮新增判断模型或查重查询。
+- `submit`：正常聊天出现值得长期复用的新信息时，主动归纳，在话题自然节点合并提交，不等用户逐次说“记住”。先筛选理解，提交 organization 和作为瞬时证据的 body；正式知识保留摘要与必要原话，保留归属、时间、不确定与否定。跳过假设、举例、秘密、用户要求不保存的内容及已查出的旧材料；不为每轮新增判断模型或查重查询。
 - 只读连接不会收到自动保存规则；仅提交连接不要求读库。纠正和删除继续需要用户明确指令及对应权限。保存成功以工具回执为准。
 
 这些是交给客户端 Agent 的默认行为说明。实际主动调用取决于客户端是否把说明和工具提供给模型并采用它们；MCP 服务无法访问未发送给它的对话，也不会在后台抓取完整聊天。客户端需重新连接以取得新说明。
@@ -148,8 +136,10 @@ cd D:\Desktop\MyCortex\core
 
 ```powershell
 Set-Content -Encoding utf8 D:\Cache\MyCortex\demo-note.txt '合成材料：测试项目计划周一完成。'
+@{ topics = @('项目计划'); entries = @(@{ summary = '测试项目计划周一完成'; subject = '测试项目'; stance = 'intent'; quote = '测试项目计划周一完成。'; timeText = '周一' }) } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 D:\Cache\MyCortex\demo-refinement.json
 & .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo add `
   --file D:\Cache\MyCortex\demo-note.txt `
+  --refinement D:\Cache\MyCortex\demo-refinement.json `
   --title '合成项目计划' --source 'synthetic:project-note' `
   --author 'synthetic-user' --request 'demo-note-1'
 
@@ -160,7 +150,7 @@ Set-Content -Encoding utf8 D:\Cache\MyCortex\demo-note.txt '合成材料：测�
 
 `--source` 是来源地址或可识别来源描述，不会自动抓取。`--author` 表示原作者，未知时可填 `unknown`；`--submitted-by` 表示转交者，默认 `local-operator`，它是来源记录，不是认证身份。`--observed-at` 可提供已知的来源时间，格式为含时区的 ISO 日期；不知道时留空，不猜测。
 
-同一 `--request` 与相同内容重复提交会返回当前材料；同编号换内容会报错。正文最多 256 KiB。当前是字面子串查询，支持中文、标点和百分号，最多返回 50 条，每条正文摘录最多 240 字符；结果是原始材料，不是 AI 验证后的事实。
+同一 `--request` 与相同内容重复提交会返回当前材料；同编号换内容会报错。正文最多 256 KiB。当前是字面子串查询，支持中文、标点和百分号，最多返回 50 条，每条正文摘录最多 240 字符；结果是来源支持的知识解读，尚未独立核实其真实性。
 
 仅保存链接：
 
@@ -182,7 +172,7 @@ D:\CodexTools\python\Scripts\qq-digest.exe export-mycortex `
   --out D:\Cache\MyCortex\qqdigest-2026-11-15.json
 ```
 
-然后导入同一 MyCortex store：
+导出后先由 Agent 阅读、筛选和提炼，为每个候选补充 organization；旧版只包含原文的 bundle 会被拒绝。再导入同一 MyCortex store：
 
 ```powershell
 & .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo init
@@ -190,7 +180,7 @@ D:\CodexTools\python\Scripts\qq-digest.exe export-mycortex `
   --file D:\Cache\MyCortex\qqdigest-2026-11-15.json
 ```
 
-导入材料正文中保留候选正文、筛选理由和有限原消息上下文，来源为 `qqdigest://...` URI。每个候选使用 `qqdigest:candidate:<id>` 作为稳定请求编号：重复导入不重复建条目，正文变化会记录为新的 MyCortex 修订。bundle 和目标数据库必须由操作者显式指定；该命令不读取 QQ 数据库，也不接收 pending、later 或 ignored 候选。
+只保存提炼知识及选定必要原话，来源为 `qqdigest://...` URI。每个候选使用 `qqdigest:candidate:<id>` 作为稳定请求编号：重复导入不重复建条目，来源输入变化会记录新的知识修订；人工纠正后的条目拒绝自动覆盖。空提炼跳过，不保存原文。bundle 和目标数据库必须由操作者显式指定；该命令不读取 QQ 数据库，也不接收 pending、later 或 ignored 候选。
 
 ## 纠正、历史和删除
 
@@ -231,12 +221,12 @@ Set-Content -Encoding utf8 D:\Cache\MyCortex\demo-note.txt '合成纠正：测�
 - QQ/微信自动采集、目录批量扫描、PDF/Word 解析、E2EE 与生产部署仍待实现。独立 Windows 记忆窗口已有源码启动器，独立分发安装包尚未提供。
 - 数据模型保持来源开放，不设置学历、健康等固定领域。
 
-## 验证
+## 历史验证（2026-11-15，旧版原文存储）
 
 ```powershell
 node scripts/run-vitest.mjs src/knowledge/store.test.ts src/knowledge/organization-store.test.ts src/knowledge/organizer.test.ts src/knowledge/recovery.test.ts src/knowledge/files.test.ts src/knowledge/client.test.ts src/cli/knowledge-cli.test.ts src/mcp/knowledge-serve.test.ts src/agents/tools/knowledge-tools.test.ts --maxWorkers=1
 
-# Requires the existing local Ollama model; isolated synthetic state only.
+# Historical opt-in model test; do not run as part of the current model-free refinement task.
 $env:OPENCLAW_LIVE_KNOWLEDGE_CHAT='1'
 node scripts/run-vitest.mjs run --config test/vitest/vitest.live.config.ts src/gateway/knowledge-chat.live.test.ts --maxWorkers=1
 ```

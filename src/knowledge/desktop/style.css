@@ -44,6 +44,19 @@ select:focus-visible {
   outline: 3px solid #0b57d0;
   outline-offset: 3px;
 }
+summary:focus-visible {
+  outline: 3px solid #0b57d0;
+  outline-offset: 3px;
+}
+summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+  padding-block: 10px;
+}
+.source-section .metadata {
+  margin-top: 16px;
+}
 [hidden] {
   display: none !important;
 }

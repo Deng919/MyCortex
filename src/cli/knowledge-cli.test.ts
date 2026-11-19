@@ -18,6 +18,22 @@ it("runs the material lifecycle through the actual command parser and local stor
   const store = path.join(directory, "store");
   const text = path.join(directory, "material.txt");
   await fs.writeFile(text, "合成资料：电路中电压为 5V。", "utf8");
+  const refinement = path.join(directory, "refinement.json");
+  await fs.writeFile(
+    refinement,
+    JSON.stringify({
+      topics: ["电路"],
+      entries: [
+        {
+          summary: "电路电压为5V",
+          subject: "合成电路",
+          stance: "explicit",
+          quote: "电路中电压为 5V。",
+          timeText: null,
+        },
+      ],
+    }),
+  );
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   async function run(...args: string[]) {
     const program = new Command().exitOverride();
@@ -30,6 +46,8 @@ it("runs the material lifecycle through the actual command parser and local stor
     "add",
     "--file",
     text,
+    "--refinement",
+    refinement,
     "--title",
     "合成电路",
     "--source",
@@ -39,7 +57,9 @@ it("runs the material lifecycle through the actual command parser and local stor
     "--request",
     "cli-1",
   );
-  expect(saved).toMatchObject({ body: "合成资料：电路中电压为 5V。", revision: 1 });
+  expect(saved).toMatchObject({ title: "电路电压为5V", revision: 1 });
+  expect(saved.body).toContain("电路中电压为 5V。");
+  expect(saved.body).not.toContain("合成资料：");
   const id = String(saved.id);
   expect(await run("read", id)).toMatchObject({ sourceUri: "synthetic:circuit" });
   await fs.writeFile(text, "合成纠正：电压为 3V。", "utf8");
@@ -87,6 +107,18 @@ it("imports a QQ Digest bundle through the actual command parser", async () => {
           groupName: "学习群",
           messageIds: ["m1"],
           body: "# 合成 QQ 资料\n\n原文和上下文",
+          organization: {
+            topics: ["合成资料"],
+            entries: [
+              {
+                summary: "合成知识",
+                subject: "合成来源",
+                stance: "explicit",
+                quote: "原文和上下文",
+                timeText: null,
+              },
+            ],
+          },
           sourceUri: "qqdigest://group/123/message/m1",
           author: "QQ Digest 群 学习群",
           observedAt: "2026-11-15T08:00:00.000+08:00",

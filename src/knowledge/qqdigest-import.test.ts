@@ -23,6 +23,18 @@ function bundle(body = "# 教程\n\n正文", candidateRevision = 2) {
         groupName: "学习群",
         messageIds: ["m1"],
         body,
+        organization: {
+          topics: ["合成教程"],
+          entries: [
+            {
+              summary: body.includes("修订") ? "教程已有修订" : "教程知识",
+              subject: "合成来源",
+              stance: "explicit" as const,
+              quote: body,
+              timeText: null,
+            },
+          ],
+        },
         sourceUri: "qqdigest://group/123/message/m1",
         author: "QQ Digest 群 学习群",
         observedAt: "2026-11-15T08:00:00.000+08:00",
@@ -61,7 +73,47 @@ describe("QQ Digest bundle import", () => {
     const result = importQqDigestBundle(knowledge, bundle("# 教程\n\n修订后的正文"));
     expect(result).toMatchObject({ imported: 0, updated: 1, unchanged: 0 });
     const material = knowledge.findByRequestKey("qqdigest:candidate:7");
-    expect(material).toMatchObject({ revision: 2, body: "# 教程\n\n修订后的正文" });
+    expect(material).toMatchObject({ revision: 2, title: "教程已有修订" });
+    expect(material?.body).toContain("修订后的正文");
+    expect(knowledge.organization(material!.id)).toMatchObject({
+      status: "organized",
+      sourceRevision: 2,
+    });
+    expect(importQqDigestBundle(knowledge, bundle("# 教程\n\n修订后的正文"))).toMatchObject({
+      unchanged: 1,
+    });
+    knowledge.correct(material!.id, 2, {
+      body: "本人纠正的知识",
+      note: "本人纠正",
+      submittedBy: "local-user",
+    });
+    expect(() => importQqDigestBundle(knowledge, bundle("# 教程\n\n第三版"))).toThrow(
+      /manual|correct/i,
+    );
+    expect(knowledge.read(material!.id).body).toBe("本人纠正的知识");
+  });
+
+  it("rejects raw-only bundles before writing and skips empty refinements", () => {
+    const knowledge = store();
+    const raw = bundle();
+    const { organization: _organization, ...unrefined } = raw.candidates[0]!;
+    expect(() =>
+      importQqDigestBundle(knowledge, {
+        ...raw,
+        candidates: [
+          raw.candidates[0],
+          { ...unrefined, candidateId: 8, requestKey: "qqdigest:candidate:8" },
+        ],
+      }),
+    ).toThrow(/refin/i);
+    expect(knowledge.list()).toEqual([]);
+    expect(
+      importQqDigestBundle(knowledge, {
+        ...raw,
+        candidates: [{ ...unrefined, organization: { topics: [], entries: [] } }],
+      }),
+    ).toMatchObject({ skipped: 1, imported: 0 });
+    expect(knowledge.list()).toEqual([]);
   });
 
   it("rejects duplicate candidate identities in one bundle", () => {

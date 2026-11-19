@@ -16,7 +16,6 @@ import {
   type KnowledgeTables,
   type Material,
   type MaterialRow,
-  type RevisionRow,
   type Submission,
 } from "./contract.js";
 import {
@@ -25,8 +24,15 @@ import {
   validateOrganization,
   type OrganizationResult,
   type OrganizationRow,
+  type KnowledgeOrganization,
 } from "./organization-contract.js";
-import { initializeKnowledgeStore, queueImportedOrganizations } from "./store-schema.js";
+import { prepareKnowledgeSubmission, sourceFingerprintFromNote } from "./refinement.js";
+import {
+  importKnowledgeBundle,
+  listDeletions,
+  type KnowledgeRecoveryContext,
+} from "./store-recovery.js";
+import { initializeKnowledgeStore } from "./store-schema.js";
 
 function positiveRevision(value: number): void {
   if (!Number.isSafeInteger(value) || value < 1) {
@@ -217,8 +223,105 @@ export class KnowledgeStore {
     });
   }
 
+  /** Low-level registration for legacy store/recovery fixtures, never source ingestion. */
   submit(raw: Submission): Material {
     const input = submissionSchema.parse(raw);
+    return this.saveSubmission(input);
+  }
+
+  /** Production source inputs pass here; unrefined source text is never persisted. */
+  submitKnowledge(raw: Submission, refinement?: KnowledgeOrganization): Material | null {
+    const prepared = prepareKnowledgeSubmission(raw, refinement);
+    return prepared
+      ? this.saveSubmission(prepared.input, prepared.sourceFingerprint, prepared.refinement)
+      : null;
+  }
+
+  /** A source refresh cannot replace knowledge the user has corrected. */
+  updateKnowledge(
+    id: string,
+    expectedRevision: number,
+    raw: Submission,
+    refinement: KnowledgeOrganization,
+  ): Material | null {
+    positiveRevision(expectedRevision);
+    const prepared = prepareKnowledgeSubmission(raw, refinement);
+    if (!prepared) {
+      return null;
+    }
+    return this.transaction(() => {
+      const current = this.read(id);
+      if (
+        current.revision !== expectedRevision ||
+        current.requestKey !== prepared.input.requestKey
+      ) {
+        throw new Error("Knowledge source revision conflict");
+      }
+      if (!sourceFingerprintFromNote(current.note) || this.organization(id).manual) {
+        throw new Error(
+          "Source refresh requires refined knowledge without manual corrections; legacy raw imports must be removed first",
+        );
+      }
+      if (sourceFingerprintFromNote(current.note) === prepared.sourceFingerprint) {
+        return current;
+      }
+      const { requestKey: _requestKey, ...content } = prepared.input;
+      this.rows(
+        this.query.insertInto("revisions").values({
+          ...content,
+          materialId: id,
+          revision: expectedRevision + 1,
+          recordedAt: new Date().toISOString(),
+          note: JSON.stringify({
+            kind: "knowledge-refinement",
+            sourceFingerprint: prepared.sourceFingerprint,
+          }),
+        }),
+      );
+      this.rows(
+        this.query
+          .updateTable("materials")
+          .set({ currentRevision: expectedRevision + 1 })
+          .where("id", "=", id),
+      );
+      this.saveRefinement(
+        id,
+        expectedRevision + 1,
+        prepared.refinement!,
+        prepared.input.submittedBy,
+      );
+      return this.read(id);
+    });
+  }
+
+  private saveRefinement(
+    materialId: string,
+    sourceRevision: number,
+    refinement: KnowledgeOrganization,
+    submittedBy: string,
+  ) {
+    const values = {
+      sourceRevision,
+      revision: 1,
+      status: "organized" as const,
+      organization: JSON.stringify(refinement),
+      processor: `refined:${submittedBy}`,
+      manual: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    this.rows(
+      this.query
+        .insertInto("organizations")
+        .values({ materialId, ...values })
+        .onConflict((conflict) => conflict.column("materialId").doUpdateSet(values)),
+    );
+  }
+
+  private saveSubmission(
+    input: ReturnType<typeof submissionSchema.parse>,
+    sourceFingerprint?: string,
+    refinement?: KnowledgeOrganization,
+  ): Material {
     const fingerprint = createHash("sha256").update(JSON.stringify(input)).digest("hex");
     return this.transaction(() => {
       const existing = this.rows(
@@ -228,7 +331,10 @@ export class KnowledgeStore {
         if (existing.deletedAt) {
           throw new Error("Request refers to a deleted material");
         }
-        if (existing.fingerprint !== fingerprint) {
+        const sameInput = sourceFingerprint
+          ? sourceFingerprintFromNote(this.read(existing.id, 1).note) === sourceFingerprint
+          : existing.fingerprint === fingerprint;
+        if (!sameInput) {
           throw new Error("Request key already used with different content");
         }
         return this.read(existing.id);
@@ -246,11 +352,17 @@ export class KnowledgeStore {
           materialId: id,
           revision: 1,
           recordedAt: new Date().toISOString(),
-          note: "",
+          note: sourceFingerprint
+            ? JSON.stringify({ kind: "knowledge-refinement", sourceFingerprint })
+            : "",
         }),
       );
       if (input.kind === "text") {
-        this.queueOrganization(id, 1);
+        if (refinement) {
+          this.saveRefinement(id, 1, refinement, input.submittedBy);
+        } else {
+          this.queueOrganization(id, 1);
+        }
       }
       return this.read(id);
     });
@@ -582,132 +694,20 @@ export class KnowledgeStore {
   }
 
   deletions(): MaterialRow[] {
-    const rows = this.rows(
-      this.query
-        .selectFrom("materials")
-        .selectAll()
-        .where("deletedAt", "is not", null)
-        .orderBy("id")
-        .limit(10001),
-    );
-    if (rows.length > 10000) {
-      throw new Error("Deletion ledger exceeds 10000 materials; use an offline database backup");
-    }
-    return rows;
+    return listDeletions(this.recoveryContext());
   }
 
   import(raw: unknown): void {
-    const bundle = bundleSchema.parse(raw);
-    if (Buffer.byteLength(JSON.stringify(bundle)) > MAX_EXPORT_BYTES) {
-      throw new Error("Import exceeds 32 MiB");
-    }
-    // Validate the complete graph before opening a write transaction.
-    const materials = new Map(bundle.materials.map((row) => [row.id, row]));
-    if (
-      materials.size !== bundle.materials.length ||
-      new Set(bundle.materials.map((row) => row.requestKey)).size !== materials.size
-    ) {
-      throw new Error("Duplicate imported material");
-    }
-    const revisions = new Map<string, RevisionRow[]>();
-    for (const row of bundle.revisions) {
-      const parent = materials.get(row.materialId);
-      if (!parent || parent.deletedAt) {
-        throw new Error("Invalid imported revision parent");
-      }
-      submissionSchema.parse({
-        requestKey: parent.requestKey,
-        title: row.title,
-        body: row.body,
-        sourceUri: row.sourceUri,
-        author: row.author,
-        submittedBy: row.submittedBy,
-        observedAt: row.observedAt,
-        kind: row.kind,
-      });
-      const group = revisions.get(row.materialId) ?? [];
-      group.push(row);
-      revisions.set(row.materialId, group);
-    }
-    for (const parent of bundle.materials) {
-      const group = (revisions.get(parent.id) ?? []).toSorted((a, b) => a.revision - b.revision);
-      if (parent.deletedAt) {
-        continue;
-      }
-      if (
-        group.length !== parent.currentRevision ||
-        group.some((row, index) => row.revision !== index + 1)
-      ) {
-        throw new Error("Incomplete imported revisions");
-      }
-      const original = group[0];
-      if (!original) {
-        throw new Error("Missing imported original");
-      }
-      const normalized = submissionSchema.parse({
-        requestKey: parent.requestKey,
-        title: original.title,
-        body: original.body,
-        sourceUri: original.sourceUri,
-        author: original.author,
-        submittedBy: original.submittedBy,
-        observedAt: original.observedAt,
-        kind: original.kind,
-      });
-      if (
-        createHash("sha256").update(JSON.stringify(normalized)).digest("hex") !== parent.fingerprint
-      ) {
-        throw new Error("Imported original does not match its submission fingerprint");
-      }
-    }
-    const organizationIds = new Set<string>();
-    for (const row of bundle.organizations) {
-      const parent = materials.get(row.materialId);
-      const source = revisions
-        .get(row.materialId)
-        ?.find((revision) => revision.revision === row.sourceRevision);
-      if (
-        !parent ||
-        parent.deletedAt ||
-        parent.currentRevision !== row.sourceRevision ||
-        source?.kind !== "text" ||
-        organizationIds.has(row.materialId)
-      ) {
-        throw new Error("Invalid imported organization parent or revision");
-      }
-      organizationIds.add(row.materialId);
-      if (row.status === "pending") {
-        if (row.organization !== null || row.processor !== null || row.manual !== 0) {
-          throw new Error("Invalid imported pending organization");
-        }
-      } else {
-        const organization: unknown =
-          row.organization === null ? undefined : JSON.parse(row.organization);
-        const result = organizationResultSchema.parse({
-          status: row.status,
-          organization,
-          processor: row.processor,
-        });
-        if (result.organization !== undefined) {
-          validateOrganization(result.organization, source.body);
-        }
-      }
-    }
-    this.transaction(() => {
-      if (this.rows(this.query.selectFrom("materials").select("id").limit(1)).length) {
-        throw new Error("Import requires an empty knowledge store");
-      }
-      for (const row of bundle.materials) {
-        this.rows(this.query.insertInto("materials").values(row));
-      }
-      for (const row of bundle.revisions) {
-        this.rows(this.query.insertInto("revisions").values(row));
-      }
-      for (const row of bundle.organizations) {
-        this.rows(this.query.insertInto("organizations").values(row));
-      }
-      queueImportedOrganizations(this.db);
-    });
+    importKnowledgeBundle(this.recoveryContext(), raw);
+  }
+
+  private recoveryContext(): KnowledgeRecoveryContext {
+    return {
+      db: this.db,
+      query: this.query,
+      rows: <T>(statement: Compilable<T>) => this.rows(statement),
+      transaction: <T>(operation: () => T) => this.transaction(operation),
+    };
   }
 
   close(): void {

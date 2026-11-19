@@ -1,10 +1,10 @@
 import type { MessagePort } from "node:worker_threads";
 import type { Correction, Material, Submission } from "./contract.js";
-import type { OrganizationResult } from "./organization-contract.js";
+import type { OrganizationResult, KnowledgeOrganization } from "./organization-contract.js";
 import type { KnowledgeStore } from "./store.js";
 
 export type KnowledgeCommand =
-  | { operation: "submit"; input: Submission }
+  | { operation: "submit"; input: Submission; organization?: KnowledgeOrganization }
   | {
       operation: "read";
       input: { id: string; revision?: number; offset?: number; length?: number };
@@ -31,7 +31,7 @@ export type KnowledgeCommand =
     };
 
 export type KnowledgeOutputs = {
-  submit: Material;
+  submit: Material | null;
   read: ReturnType<KnowledgeStore["readSlice"]>;
   search: ReturnType<KnowledgeStore["searchMany"]>;
   list: ReturnType<KnowledgeStore["list"]>;

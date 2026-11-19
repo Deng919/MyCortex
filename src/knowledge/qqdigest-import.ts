@@ -1,4 +1,5 @@
 import { qqDigestBundleSchema, type QqDigestBundle } from "./qqdigest-contract.js";
+import { prepareKnowledgeSubmission } from "./refinement.js";
 import type { KnowledgeStore } from "./store.js";
 
 type QqDigestCandidate = QqDigestBundle["candidates"][number];
@@ -16,26 +17,16 @@ function submission(candidate: QqDigestCandidate) {
   };
 }
 
-function equalCurrent(
-  current: ReturnType<KnowledgeStore["read"]>,
-  next: ReturnType<typeof submission>,
-): boolean {
-  return (
-    current.title === next.title &&
-    current.body === next.body &&
-    current.sourceUri === next.sourceUri &&
-    current.author === next.author &&
-    current.submittedBy === next.submittedBy &&
-    current.observedAt === next.observedAt &&
-    current.kind === next.kind
-  );
-}
-
 export function importQqDigestBundle(store: KnowledgeStore, raw: unknown) {
   const bundle = qqDigestBundleSchema.parse(raw);
+  // Validate every refinement before any write; old raw-only exports are not knowledge.
+  const prepared = bundle.candidates.map((candidate) =>
+    prepareKnowledgeSubmission(submission(candidate), candidate.organization),
+  );
   let imported = 0;
   let updated = 0;
   let unchanged = 0;
+  let skipped = 0;
   const materials: Array<{
     candidateId: number;
     materialId: string;
@@ -43,11 +34,15 @@ export function importQqDigestBundle(store: KnowledgeStore, raw: unknown) {
     status: string;
   }> = [];
 
-  for (const candidate of bundle.candidates) {
-    const next = submission(candidate);
+  for (const [index, candidate] of bundle.candidates.entries()) {
+    const refined = prepared[index];
+    if (!refined) {
+      skipped++;
+      continue;
+    }
     const current = store.findByRequestKey(candidate.requestKey);
     if (!current) {
-      const saved = store.submit(next);
+      const saved = store.submitKnowledge(submission(candidate), candidate.organization)!;
       imported += 1;
       materials.push({
         candidateId: candidate.candidateId,
@@ -57,7 +52,13 @@ export function importQqDigestBundle(store: KnowledgeStore, raw: unknown) {
       });
       continue;
     }
-    if (equalCurrent(current, next)) {
+    const saved = store.updateKnowledge(
+      current.id,
+      current.revision,
+      submission(candidate),
+      candidate.organization!,
+    );
+    if (saved?.revision === current.revision) {
       unchanged += 1;
       materials.push({
         candidateId: candidate.candidateId,
@@ -67,16 +68,11 @@ export function importQqDigestBundle(store: KnowledgeStore, raw: unknown) {
       });
       continue;
     }
-    const saved = store.correct(current.id, current.revision, {
-      body: next.body,
-      note: `QQ Digest 候选 ${candidate.candidateId} 更新至候选版本 ${candidate.candidateRevision}`,
-      submittedBy: next.submittedBy,
-    });
     updated += 1;
     materials.push({
       candidateId: candidate.candidateId,
-      materialId: saved.id,
-      revision: saved.revision,
+      materialId: saved!.id,
+      revision: saved!.revision,
       status: "updated",
     });
   }
@@ -88,6 +84,7 @@ export function importQqDigestBundle(store: KnowledgeStore, raw: unknown) {
     imported,
     updated,
     unchanged,
+    skipped,
     materials,
   };
 }

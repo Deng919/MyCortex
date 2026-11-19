@@ -19,13 +19,6 @@ let returnFocus = null;
 let directory = "";
 let editingMaterial = null;
 let deletingMaterial = null;
-const statusNames = {
-  pending: "尚未整理",
-  organized: "已整理",
-  empty: "暂无整理条目",
-  failed: "整理失败，原文已保留",
-  skipped: "已跳过整理",
-};
 const stanceNames = {
   explicit: "明确表述",
   intent: "计划 / 意向",
@@ -77,10 +70,10 @@ function renderList() {
         "p",
         "list-empty",
         $("search").value.trim()
-          ? "没有找到匹配的记忆。\n试试更短的关键词。"
+          ? "没有找到匹配的知识。\n试试更短的关键词。"
           : page
-            ? "这一页没有更多记忆。"
-            : "还没有保存的记忆。\n从一段文字开始吧。",
+            ? "这一页没有更多知识。"
+            : "还没有保存的知识。\n可以手写已提炼的知识，或通过 Agent 提交。",
       ),
     );
   }
@@ -89,10 +82,7 @@ function renderList() {
     if (item.id === currentId) {
       card.setAttribute("aria-current", "true");
     }
-    card.append(
-      node("span", "card-title", item.title),
-      node("span", "card-excerpt", item.excerpt || "仅保存来源链接"),
-    );
+    card.append(node("span", "card-title", item.title));
     const bottom = node("span", "card-bottom");
     bottom.append(node("span", "", item.sourceUri), node("span", "", date(item.recordedAt)));
     card.append(bottom);
@@ -131,7 +121,7 @@ async function loadList() {
   }
 }
 function tab(name) {
-  for (const key of ["original", "organization", "history"]) {
+  for (const key of ["knowledge", "history"]) {
     $(key + "-panel").hidden = key !== name;
     if (key === name) {
       $("tab-" + key).setAttribute("aria-current", "page");
@@ -143,13 +133,12 @@ function tab(name) {
 function renderDetail(historical) {
   $("empty").hidden = true;
   $("detail").hidden = false;
-  $("kind").textContent = current.kind === "text" ? "文字记忆" : "来源链接";
+  $("kind").textContent = current.kind === "text" ? "知识" : "来源链接";
   $("saved-date").textContent = date(current.recordedAt, true);
   $("edit").disabled = historical || current.kind !== "text";
   $("edit").title =
-    current.kind === "reference" ? "链接未保存正文，可新增文字记忆" : "修改正文并保留历史版本";
+    current.kind === "reference" ? "链接未保存正文，可新增手写知识" : "修改知识并保留历史版本";
   $("delete").disabled = historical;
-  $("body").textContent = current.body || "这条记忆只保存了来源地址，尚未抓取或保存正文。";
   $("historical-banner").hidden = !historical;
   $("metadata").replaceChildren();
   for (const [label, value] of [
@@ -157,39 +146,35 @@ function renderDetail(historical) {
     ["原作者", current.author === "unknown" ? "未知" : current.author],
     ["来源时间", date(current.observedAt, true)],
     ["保存时间", date(current.recordedAt, true)],
-    ["材料编号", current.id],
+    ["知识编号", current.id],
   ]) {
     $("metadata").append(node("dt", "", label), node("dd", "", value));
   }
-  $("organization-panel").replaceChildren();
+  const panel = $("knowledge-content");
+  panel.replaceChildren();
   const organization = current.organization;
-  $("organization-panel").append(
-    node(
-      "p",
-      "interpretation-note",
-      "整理结果是对原文的解读，保留观点归属和引用。核对内容时，请以原文为依据。",
-    ),
-  );
-  $("organization-panel").append(
-    node("span", "pill", organization ? statusNames[organization.status] : "该版本没有整理结果"),
-  );
-  if (organization?.organization) {
-    const content = JSON.parse(organization.organization);
+  if (organization?.status === "organized" && organization.organization) {
+    const content = organization.organization;
     if (content.topics.length) {
-      $("organization-panel").append(node("p", "muted", content.topics.join(" · ")));
+      panel.append(node("p", "muted", content.topics.join(" · ")));
     }
     for (const entry of content.entries) {
       const card = node("article", "interpretation");
       card.append(
         node("span", "pill", stanceNames[entry.stance]),
         node("h3", "", entry.summary),
-        node("p", "muted", `主体：${entry.subject}${entry.timeText ? " · " + entry.timeText : ""}`),
-        node("blockquote", "", entry.quote),
+        node("p", "muted", `${entry.subject}${entry.timeText ? " · " + entry.timeText : ""}`),
       );
-      $("organization-panel").append(card);
+      const evidence = node("details", "evidence");
+      evidence.append(node("summary", "", "查看依据"), node("blockquote", "", entry.quote));
+      card.append(evidence);
+      panel.append(card);
     }
+  } else {
+    panel.append(node("h2", "", current.title));
+    panel.append(node("div", "body-text", current.body || "仅保留来源链接，未抓取正文。"));
   }
-  tab("original");
+  tab("knowledge");
   document.querySelector(".workspace").classList.add("detail-open");
   renderList();
 }
@@ -239,7 +224,7 @@ async function showHistory() {
       copy.append(
         node("h3", "", `版本 ${entry.revision}`),
         node("p", "", date(entry.recordedAt, true)),
-        node("p", "", entry.note || "首次保存"),
+        node("p", "", historyNote(entry.note)),
       );
       const view = node("button", "secondary", "查看版本");
       view.addEventListener("click", () => {
@@ -254,13 +239,29 @@ async function showHistory() {
     }
   }
 }
+function historyNote(note) {
+  if (!note) return "首次保存";
+  try {
+    if (JSON.parse(note).kind === "knowledge-refinement") return "知识提炼入库";
+  } catch {
+    // A user correction note is ordinary text.
+  }
+  return note;
+}
 function syncEditor() {
   const reference = editorMode === "new" && $("input-kind").value === "reference";
   $("body-field").hidden = reference;
   $("input-body").required = !reference;
+  if (editorMode === "new") {
+    $("input-body").maxLength = 2000;
+  } else {
+    $("input-body").removeAttribute("maxlength");
+  }
   $("body-count").textContent = reference
     ? "只保存地址，不抓取正文"
-    : `${new TextEncoder().encode($("input-body").value).length.toLocaleString()} / 262,144 字节`;
+    : editorMode === "new"
+      ? `${$("input-body").value.length.toLocaleString()} / 2,000 字`
+      : `${new TextEncoder().encode($("input-body").value).length.toLocaleString()} / 262,144 字节`;
 }
 function openEditor(mode) {
   editorMode = mode;
@@ -271,14 +272,20 @@ function openEditor(mode) {
   $("new-fields").hidden = mode !== "new";
   $("input-title").required = mode === "new";
   $("note-field").hidden = mode === "new";
-  $("editor-title").textContent = mode === "new" ? "新增记忆" : "编辑记忆";
+  $("editor-title").textContent = mode === "new" ? "手写知识" : "编辑知识";
   $("edit-description").textContent =
     mode === "new"
-      ? "保存文字或来源链接。文字支持修改，并保留历史版本。"
-      : "修改正文后会创建新版本；标题、来源与原作者保留，旧版本仍可查看。";
-  $("save").textContent = mode === "new" ? "保存记忆" : "保存修改";
+      ? "直接记录你已理解、筛选和提炼的知识。聊天、文件等原始材料请通过已连接的 Agent 提炼后提交。"
+      : "修改已提炼的知识后会创建新版本，旧版本仍可查看。";
+  $("save").textContent = mode === "new" ? "保存知识" : "保存修改";
   requestKey = crypto.randomUUID();
   $("input-body").value = mode === "edit" ? current.body : "";
+  if (mode === "edit" && current.organization?.status === "organized") {
+    const entries = current.organization.organization.entries;
+    if (entries.length === 1 && entries[0].subject === "用户手写知识") {
+      $("input-body").value = entries[0].quote;
+    }
+  }
   syncEditor();
   $("editor").showModal();
   (mode === "new" ? $("input-title") : $("input-body")).focus();
@@ -304,6 +311,7 @@ async function saveMaterial() {
       editorMode === "new"
         ? await api("materials", {
             requestKey,
+            entryMode: "manual-knowledge",
             title: $("input-title").value.trim(),
             kind: $("input-kind").value,
             body: $("input-kind").value === "reference" ? "" : $("input-body").value,
@@ -318,7 +326,7 @@ async function saveMaterial() {
     $("editor").close();
     $("search").value = "";
     page = 0;
-    message(editorMode === "new" ? "记忆已保存。" : "修改已保存，旧版本可在历史中查看。");
+    message(editorMode === "new" ? "知识已保存。" : "修改已保存，旧版本可在历史中查看。");
     await loadList();
     await openMaterial(result.id);
     $("edit").focus();
@@ -362,7 +370,7 @@ async function deleteMaterial() {
     $("delete-dialog").close();
     $("detail").hidden = true;
     $("empty").hidden = false;
-    message("记忆及其全部历史版本已删除。");
+    message("知识及其全部历史版本已删除。");
     page = 0;
     await loadList();
     if (innerWidth <= 650) {
@@ -403,8 +411,7 @@ $("empty-new").addEventListener("click", () => openEditor("new"));
 $("edit").addEventListener("click", () => openEditor("edit"));
 $("input-kind").addEventListener("change", syncEditor);
 $("input-body").addEventListener("input", syncEditor);
-$("tab-original").addEventListener("click", () => tab("original"));
-$("tab-organization").addEventListener("click", () => tab("organization"));
+$("tab-knowledge").addEventListener("click", () => tab("knowledge"));
 $("tab-history").addEventListener("click", () => {
   void showHistory();
 });
@@ -464,7 +471,7 @@ async function initialize() {
   try {
     const info = await api("info");
     directory = info.directory;
-    $("connection").textContent = "已连接本地记忆库";
+    $("connection").textContent = "已连接本地知识库";
     await loadList();
   } catch (error) {
     $("connection").textContent = "连接失败";

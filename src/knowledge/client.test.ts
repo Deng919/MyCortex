@@ -16,6 +16,18 @@ const submission = {
   submittedBy: "synthetic-connection",
   kind: "text" as const,
 };
+const organization = {
+  topics: ["synthetic"],
+  entries: [
+    {
+      summary: "Alpha 卷积",
+      subject: "synthetic-user",
+      stance: "explicit" as const,
+      quote: "Alpha 卷积",
+      timeText: null,
+    },
+  ],
+};
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-worker-"));
   roots.push(root);
@@ -37,16 +49,22 @@ describe("knowledge runtime worker", () => {
     expect(
       await client.execute({ operation: "search", input: { terms: ["missing"] } }, options),
     ).toEqual([]);
-    const material = await client.execute({ operation: "submit", input: submission }, options);
-    expect(await client.execute({ operation: "pending", input: {} }, options)).toMatchObject([
-      { id: material.id },
-    ]);
+    await expect(
+      client.execute({ operation: "submit", input: submission }, options),
+    ).rejects.toThrow(/refin/i);
+    const material = (await client.execute(
+      { operation: "submit", input: submission, organization },
+      options,
+    ))!;
+    expect(await client.execute({ operation: "pending", input: {} }, options)).toEqual([]);
     await client.execute(
       {
         operation: "organize",
         input: {
           id: material.id,
           expectedRevision: 1,
+          manual: true,
+          expectedOrganizationRevision: 1,
           result: {
             status: "organized",
             processor: "synthetic/model",
@@ -113,11 +131,14 @@ describe("knowledge runtime worker", () => {
 
   it("rechecks current authority after lock waits and before committing", async () => {
     const { client } = await fixture();
-    await client.execute({ operation: "submit", input: submission }, { assertCurrent() {} });
+    await client.execute(
+      { operation: "submit", input: submission, organization },
+      { assertCurrent() {} },
+    );
     let admissions = 0;
     await expect(
       client.execute(
-        { operation: "submit", input: { ...submission, requestKey: "revoked" } },
+        { operation: "submit", input: { ...submission, requestKey: "revoked" }, organization },
         {
           assertCurrent() {
             if (++admissions >= 3) {
@@ -138,7 +159,7 @@ describe("knowledge runtime worker", () => {
     controller.abort(new Error("cancelled"));
     await expect(
       client.execute(
-        { operation: "submit", input: submission },
+        { operation: "submit", input: submission, organization },
         {
           assertCurrent() {},
           signal: controller.signal,
@@ -150,12 +171,19 @@ describe("knowledge runtime worker", () => {
 
   it("reports uncertain writes when cancellation loses the reply after commit admission", async () => {
     const { client } = await fixture();
-    await client.execute({ operation: "submit", input: submission }, { assertCurrent() {} });
+    await client.execute(
+      { operation: "submit", input: submission, organization },
+      { assertCurrent() {} },
+    );
     const controller = new AbortController();
     let checks = 0;
     await expect(
       client.execute(
-        { operation: "submit", input: { ...submission, requestKey: "late-cancellation" } },
+        {
+          operation: "submit",
+          input: { ...submission, requestKey: "late-cancellation" },
+          organization,
+        },
         {
           signal: controller.signal,
           assertCurrent() {

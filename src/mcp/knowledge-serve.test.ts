@@ -89,8 +89,52 @@ it("reads an indexed file through the external connection's explicit roots", asy
       (await client.listTools()).tools.find((tool) => tool.name === "knowledge_write")?.inputSchema,
     ).toMatchObject({
       type: "object",
-      properties: { action: expect.anything(), body: expect.anything() },
+      properties: {
+        action: expect.anything(),
+        body: expect.anything(),
+        organization: expect.anything(),
+      },
     });
+    const source = {
+      action: "submit",
+      requestId: "synthetic-refined",
+      title: "合成聊天",
+      body: "闲聊天气不错。本人可能明年读研，尚未决定。",
+      sourceUri: "synthetic:chat",
+    };
+    expect((await client.callTool({ name: "knowledge_write", arguments: source })).isError).toBe(
+      true,
+    );
+    const refined = await client.callTool({
+      name: "knowledge_write",
+      arguments: {
+        ...source,
+        organization: {
+          topics: ["学习计划"],
+          entries: [
+            {
+              summary: "读研计划未定",
+              subject: "本人",
+              stance: "uncertain",
+              quote: "本人可能明年读研，尚未决定。",
+              timeText: "明年",
+            },
+          ],
+        },
+      },
+    });
+    expect(refined.isError).not.toBe(true);
+    const receipt = refined.content.find((part) => part.type === "text");
+    if (receipt?.type !== "text") {
+      throw new Error("Expected refinement receipt");
+    }
+    const knowledgeId = (JSON.parse(receipt.text) as { id: string }).id;
+    const knowledge = await client.callTool({
+      name: "knowledge_read",
+      arguments: { action: "read", id: knowledgeId },
+    });
+    expect(JSON.stringify(knowledge.content)).toContain("读研计划未定");
+    expect(JSON.stringify(knowledge.content)).not.toContain("闲聊");
     const saved = await client.callTool({
       name: "knowledge_write",
       arguments: {

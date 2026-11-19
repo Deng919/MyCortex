@@ -20,7 +20,7 @@ function execute(
 ): KnowledgeOutputs[keyof KnowledgeOutputs] {
   switch (command.operation) {
     case "submit":
-      return store.submit(command.input);
+      return store.submitKnowledge(command.input, command.organization);
     case "read":
       return store.readSlice(command.input.id, command.input);
     case "search":
