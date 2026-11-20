@@ -67,6 +67,19 @@
 
 搜索/上下文预览保留各条知识的具体归属与会话参与者，不只返回第一条知识；摘要和引文仍为有界预览，需要完整依据时按材料 ID 读取。
 
+### 项目能力索引
+
+项目资料可以在 `organization.projectProfile` 中登记项目名称、用途、状态、明确提供或已验证的位置、可复用能力、已有脚本/技能/MCP/CLI 入口、使用方法、设计思路、依赖、限制和最近验证时间。项目实体的 `entityId` 必须对应同一组织结果中的 `kind: "project"` 实体。
+
+`knowledge_read` 的 `action: "projects"` 用 0–6 个短关键词搜索项目名称、用途、能力、用法、设计和位置，返回结构化项目卡、来源材料 ID、修订和来源时间。默认排除 `archived` 项目；需要明确查看归档项目时传 `includeArchived: true`。项目入口只是已有资源的定位信息，查询不会运行命令、打开文件、安装依赖或扩大现有授权。其他 AI 应先调用 `projects`，找到可复用项目后再按返回的入口使用已有工具。
+
+CLI 可用 `knowledge projects [关键词...]` 查看相同索引：
+
+```powershell
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo projects 知乎 搜索
+& .\scripts\knowledge.ps1 --store D:\Cache\MyCortex\demo projects 知乎 --include-archived
+```
+
 ## 文件原位保留
 
 让模型保存 `kind=reference`、空正文、`file:///D:/...` 来源的文件引用即可索引位置，不复制正文。搜索可按标题/路径定位，再用 `read_file` 在 `fileRoots` 授权范围内读取当前 UTF-8 文本。文件变更返回新的字节哈希，文件消失则报缺失；不会用旧正文冒充当前文件。拒绝越界、符号链接、硬链接、无效 UTF-8 和超过 256 KiB 的文件。

@@ -19,7 +19,7 @@ import {
   type MaterialRow,
   type Submission,
 } from "./contract.js";
-import { type NetworkOptions } from "./network.js";
+import type { NetworkOptions } from "./network.js";
 import {
   organizationResultSchema,
   organizationSchema,
@@ -29,6 +29,7 @@ import {
   type OrganizationRow,
   type KnowledgeOrganization,
 } from "./organization-contract.js";
+import { readProjectIndex, type ProjectCard } from "./project-index.js";
 import { prepareKnowledgeSubmission, sourceFingerprintFromNote } from "./refinement.js";
 import { readKnowledgeNetwork } from "./store-network.js";
 import {
@@ -38,9 +39,7 @@ import {
 } from "./store-recovery.js";
 import { initializeKnowledgeStore } from "./store-schema.js";
 function positiveRevision(value: number): void {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new Error("Expected a positive revision");
-  }
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error("Expected a positive revision");
 }
 /** Synchronous storage owner; runtime callers execute it in the knowledge worker. */
 export class KnowledgeStore {
@@ -566,6 +565,15 @@ export class KnowledgeStore {
   }
   network(options: NetworkOptions = {}) {
     return readKnowledgeNetwork(this.query, (statement) => this.rows(statement), options);
+  }
+  projects(terms: string[] = [], limit = 20, includeArchived = false): ProjectCard[] {
+    return readProjectIndex(
+      this.query,
+      (statement) => this.rows(statement),
+      terms,
+      limit,
+      includeArchived,
+    );
   }
   history(id: string) {
     this.current(id);

@@ -117,6 +117,81 @@ it("runs the material lifecycle through the actual command parser and local stor
   await expect(run("import", "--file", exported)).rejects.toThrow(/deletions-from/);
 });
 
+it("searches project capabilities through the actual command parser", async () => {
+  directory = await fs.mkdtemp(path.join(os.tmpdir(), "mycortex-project-cli-"));
+  const store = path.join(directory, "store");
+  const text = path.join(directory, "project.txt");
+  const refinement = path.join(directory, "project.json");
+  await fs.writeFile(
+    text,
+    "知乎搜索工具位于 D:/Apps/zhihu-search，使用 scripts/search.ps1 搜索知乎帖子。",
+    "utf8",
+  );
+  await fs.writeFile(
+    refinement,
+    JSON.stringify({
+      topics: ["项目", "知乎"],
+      projectProfile: {
+        entityId: "project:zhihu-search",
+        name: "知乎搜索工具",
+        purpose: "搜索知乎帖子并保留来源链接。",
+        status: "active",
+        locations: [{ kind: "workspace", path: "D:/Apps/zhihu-search" }],
+        capabilities: [
+          {
+            name: "搜索知乎帖子",
+            summary: "按关键词搜索知乎帖子。",
+            entrypoint: { kind: "script", value: "scripts/search.ps1" },
+            usage: "运行 scripts/search.ps1 -Query <关键词>",
+          },
+        ],
+        design: "复用已有浏览器会话并保留来源链接。",
+        verifiedAt: "2026-11-20T10:00:00+08:00",
+      },
+      entities: [{ id: "project:zhihu-search", name: "知乎搜索工具", kind: "project" }],
+      entries: [
+        {
+          summary: "知乎搜索工具可搜索帖子。",
+          subject: "知乎搜索工具",
+          stance: "explicit",
+          quote: "知乎搜索工具位于 D:/Apps/zhihu-search，使用 scripts/search.ps1 搜索知乎帖子。",
+          timeText: null,
+          aboutIds: ["project:zhihu-search"],
+        },
+      ],
+    }),
+    "utf8",
+  );
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  async function run(...args: string[]) {
+    const program = new Command().exitOverride();
+    await registerSubCliByName(program, "knowledge", ["node", "openclaw", "knowledge"]);
+    await program.parseAsync(["node", "openclaw", "knowledge", "--store", store, ...args]);
+    return JSON.parse(String(output.mock.calls.at(-1)?.[0])) as Record<string, unknown>;
+  }
+  await run("init");
+  await run(
+    "add",
+    "--file",
+    text,
+    "--refinement",
+    refinement,
+    "--title",
+    "知乎搜索工具",
+    "--source",
+    "synthetic:zhihu-search",
+    "--author",
+    "synthetic-user",
+    "--request",
+    "project-cli-1",
+  );
+  expect(await run("projects", "知乎", "搜索")).toMatchObject({
+    results: [
+      { name: "知乎搜索工具", capabilities: [{ entrypoint: { value: "scripts/search.ps1" } }] },
+    ],
+  });
+});
+
 it("imports a QQ Digest bundle through the actual command parser", async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), "mycortex-qqdigest-cli-"));
   const store = path.join(directory, "store");

@@ -33,6 +33,12 @@ function execute(
       return store.list(command.input.limit, command.input.offset, command.input.includeHistorical);
     case "network":
       return store.network(command.input);
+    case "projects":
+      return store.projects(
+        command.input.terms,
+        command.input.limit,
+        command.input.includeArchived,
+      );
     case "history":
       return store.history(command.input.id);
     case "pending":
@@ -83,6 +89,9 @@ serveWorkerTasks<KnowledgeWorkerReply, KnowledgeWorkerInput>((input, _channel, c
                     truncated: false,
                   },
                 };
+              }
+              if (input.command.operation === "projects") {
+                return { ok: true, value: [] };
               }
               if (
                 input.command.operation === "list" ||

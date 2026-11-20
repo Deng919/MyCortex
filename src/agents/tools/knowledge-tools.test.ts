@@ -44,13 +44,81 @@ it("advertises network navigation and explicit historical retrieval to read conn
   });
   expect(reader!.parameters).toMatchObject({
     properties: {
-      action: { enum: expect.arrayContaining(["network"]) },
+      action: { enum: expect.arrayContaining(["network", "projects"]) },
       entityId: { type: "string" },
       includeHistorical: { type: "boolean" },
+      includeArchived: { type: "boolean" },
       limit: { maximum: 50 },
     },
   });
   expect(reader!.description).toMatch(/speaker.*addressee/i);
+});
+
+it("searches reusable project capabilities without implying execution", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "knowledge-project-tool-"));
+  directories.push(directory);
+  const config: OpenClawConfig = {
+    tools: { knowledge: { directory, connections: { owner: ["read", "submit"] } } },
+  };
+  const tools = createKnowledgeTools({
+    getConfig: () => config,
+    connectionId: "owner",
+    assertCurrent() {},
+    registerCleanup: (close) => cleanups.push(close),
+  });
+  const writer = tools.find((tool) => tool.name === "knowledge_write")!;
+  const reader = tools.find((tool) => tool.name === "knowledge_read")!;
+  const profile = {
+    entityId: "project:zhihu-search",
+    name: "知乎搜索工具",
+    purpose: "搜索知乎帖子并保留来源链接。",
+    status: "active",
+    locations: [{ kind: "workspace", path: "D:/Apps/zhihu-search" }],
+    capabilities: [
+      {
+        name: "搜索知乎帖子",
+        summary: "按关键词搜索知乎帖子。",
+        entrypoint: { kind: "script", value: "scripts/search.ps1" },
+        usage: "运行 scripts/search.ps1 -Query <关键词>",
+      },
+    ],
+    design: "复用已有浏览器会话并保留来源链接。",
+    verifiedAt: "2026-11-20T10:00:00+08:00",
+  };
+  await writer.execute("project-save", {
+    action: "submit",
+    title: "知乎搜索工具",
+    body: "知乎搜索工具位于 D:/Apps/zhihu-search，使用 scripts/search.ps1 搜索知乎帖子。",
+    organization: {
+      topics: ["项目", "知乎"],
+      projectProfile: profile,
+      entities: [{ id: "project:zhihu-search", name: "知乎搜索工具", kind: "project" }],
+      entries: [
+        {
+          summary: "知乎搜索工具可搜索帖子。",
+          subject: "知乎搜索工具",
+          stance: "explicit",
+          quote: "知乎搜索工具位于 D:/Apps/zhihu-search，使用 scripts/search.ps1 搜索知乎帖子。",
+          timeText: null,
+          aboutIds: ["project:zhihu-search"],
+        },
+      ],
+    },
+  });
+  const result = await reader.execute("project-search", {
+    action: "projects",
+    terms: ["知乎", "搜索"],
+  });
+  expect(result.details).toMatchObject({
+    results: [
+      {
+        name: "知乎搜索工具",
+        locations: [{ path: "D:/Apps/zhihu-search" }],
+        capabilities: [{ entrypoint: { value: "scripts/search.ps1" } }],
+      },
+    ],
+  });
+  expect(result.details).not.toHaveProperty("executed");
 });
 
 it("returns source-backed participants and relations while keeping historical knowledge opt-in", async () => {

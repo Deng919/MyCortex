@@ -216,6 +216,16 @@ export function registerKnowledgeCli(program: Command): void {
         ),
     );
   knowledge
+    .command("projects [terms...]")
+    .description("Search reusable project locations, capabilities, usage and entrypoints")
+    .option("--include-archived", "Include archived projects explicitly")
+    .option("--limit <number>", "Result limit, 1–50", "20")
+    .action(async (terms: string[], options: { includeArchived?: boolean; limit: string }) =>
+      use(false, (store) => ({
+        results: store.projects(terms, Number(options.limit), options.includeArchived),
+      })),
+    );
+  knowledge
     .command("read <id>")
     .description("Read current material or an explicitly requested historical revision")
     .option("--revision <number>", "Historical revision")

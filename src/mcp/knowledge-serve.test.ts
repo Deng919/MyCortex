@@ -75,6 +75,14 @@ it("exposes the same durable knowledge tools over MCP with a host-owned read-onl
         text: expect.stringContaining('"truncated": false'),
       }),
     );
+    const projects = await client.callTool({
+      name: "knowledge_read",
+      arguments: { action: "projects", terms: ["知乎"] },
+    });
+    expect(projects.isError).not.toBe(true);
+    expect(projects.content).toContainEqual(
+      expect.objectContaining({ type: "text", text: expect.stringContaining('"results": []') }),
+    );
     expect(
       (
         await client.callTool({

@@ -13,6 +13,10 @@ export type KnowledgeCommand =
   | { operation: "search"; input: { terms: string[]; limit?: number; includeHistorical?: boolean } }
   | { operation: "list"; input: { limit?: number; offset?: number; includeHistorical?: boolean } }
   | { operation: "network"; input: NetworkOptions }
+  | {
+      operation: "projects";
+      input: { terms?: string[]; limit?: number; includeArchived?: boolean };
+    }
   | { operation: "history"; input: { id: string } }
   | {
       operation: "correct";
@@ -38,6 +42,7 @@ export type KnowledgeOutputs = {
   search: ReturnType<KnowledgeStore["searchMany"]>;
   list: ReturnType<KnowledgeStore["list"]>;
   network: ReturnType<KnowledgeStore["network"]>;
+  projects: ReturnType<KnowledgeStore["projects"]>;
   history: ReturnType<KnowledgeStore["history"]>;
   correct: Material;
   delete: { deleted: true; id: string };

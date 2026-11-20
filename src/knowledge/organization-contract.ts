@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { projectProfileSchema } from "./project-contract.js";
 import { conversationContextSchema, entryRoles, knowledgeEntitySchema } from "./social-contract.js";
 
 /** These labels describe an interpretation of a source, never verified reality. */
@@ -9,6 +10,7 @@ export const organizationSchema = z
     entities: z.array(knowledgeEntitySchema).max(24).optional(),
     context: conversationContextSchema.optional(),
     relevance: z.enum(["current", "background", "historical"]).optional(),
+    projectProfile: projectProfileSchema.optional(),
     entries: z
       .array(
         z.strictObject({
@@ -47,6 +49,18 @@ export const organizationSchema = z
     if (references.some((reference) => !ids.has(reference))) {
       context.addIssue({ code: "custom", message: "Knowledge references an unknown entity" });
     }
+    if (
+      organization.projectProfile &&
+      !entities.some(
+        (entity) =>
+          entity.id === organization.projectProfile?.entityId && entity.kind === "project",
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Project profile must reference a project entity",
+      });
+    }
   });
 
 /** Dialogue identity survives edits; claims and relationship interpretations do not. */
@@ -59,6 +73,7 @@ export function organizationMetadata(organization: KnowledgeOrganization | null)
     ...(organization.entities ? { entities: organization.entities } : {}),
     ...(organization.context ? { context: organization.context } : {}),
     ...(organization.relevance ? { relevance: organization.relevance } : {}),
+    ...(organization.projectProfile ? { projectProfile: organization.projectProfile } : {}),
   };
 }
 
